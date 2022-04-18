@@ -1,0 +1,10 @@
+/zone_dat.pkl
+.DS_Store
+*.xml
+*.iml
+/cF.json
+/logs/
+*.pyc
+*.csv
+.idea/csv-plugin.xml
+/predeploy_rules/
