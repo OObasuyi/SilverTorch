@@ -8,3 +8,4 @@
 *.csv
 .idea/csv-plugin.xml
 /predeploy_rules/
+.idea/.name
