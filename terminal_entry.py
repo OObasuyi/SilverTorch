@@ -3,23 +3,25 @@ from auto_fmc import AugmentedWorker
 
 
 def terminal_entry():
-    mand_arg_list = ['-cred_file', '-fmc_host', '-ftd_host', '-ppsm_location', '-access_policy','-rule_prepend_name']
-    opt_arg_list = ['--domain','--zbr_bypass']
-    parser = ArgumentParser(prog='FirePyower')
-    for marg in mand_arg_list:
-        parser.add_argument(marg,action="store",default=True,type=str)
-    for oarg in opt_arg_list:
-        parser.add_argument(oarg,default=False,action="store",type=str)
-    
-    args = parser.parse_args()
-    # handle optinal input
-    domain= args.domain if args.domain else 'Global'
-    zbr_bypass = args.zbr_bypass if args.zbr_bypass else None
 
-    return args
-    
-    fm = AugmentedWorker(cred_file=args.cred_file, ppsm_location=args.ppsm_location ,access_policy=args.access_policy,
-    rule_prepend_name=args.rule_prepend_name,fmc_host=args.fmc_host,ftd_host=args.ftd_host,domain=domain,zbr_bypass=zbr_bypass)
+    parser = ArgumentParser(prog='FirePyower')
+    mandatory_args = parser.add_argument_group(title='Mandatory Args')
+    mandatory_args.add_argument('-fmc_host',required=True,type=str)
+    mandatory_args.add_argument('-ftd_host',required=True,type=str)
+    mandatory_args.add_argument('-ppsm_location',required=True,type=str)
+    mandatory_args.add_argument('-access_policy',required=True,type=str)
+
+    optional_args = parser.add_argument_group(title='Optional Args')
+    optional_args.add_argument('--domain',default='Global',action="store",type=str)
+    optional_args.add_argument('--zbr_bypass',default=None,action="store",type=str)
+    optional_args.add_argument('--cred_file', default='cf.JSON', type=str)
+    optional_args.add_argument('-rule_prepend_name', default='auto_api_entry', type=str)
+
+    args = parser.parse_args()
+    # handle optional None input
+    args.zbr_bypass = args.zbr_bypass if args.zbr_bypass else None
+
+    fm = AugmentedWorker(cred_file=args.cred_file, ppsm_location=args.ppsm_location ,access_policy=args.access_policy, rule_prepend_name=args.rule_prepend_name,fmc_host=args.fmc_host,ftd_host=args.ftd_host,domain=args.domain,zbr_bypass=args.zbr_bypass)
     fm.driver()
 
 

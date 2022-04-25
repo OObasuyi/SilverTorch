@@ -45,7 +45,6 @@ class AugmentedWorker:
         self.ftd_password = creds.get('ftd_password') if creds.get('ftd_password') is not None else creds['fmc_password']
         self.domain = domain
         # this is just a check the file MUST be the folder
-        # todo: run the script and move the file to the dir if not there already and in the main dir
         self.ppsm_location = create_file_path('ingestion',ppsm_location)
         self.access_policy = access_policy
         self.zbr_bypass = zbr_bypass
@@ -711,6 +710,11 @@ class AugmentedWorker:
 
     @staticmethod
     def get_device_creds(cred_file):
+        cred_file = create_file_path('safe',cred_file)
         with open(cred_file,'r') as cf:
             return json.load(cf)
+
+
+if __name__ == "__main__":
+    augWork = AugmentedWorker(cred_file='cred_file.json', ppsm_location='pps_file.csv',access_policy='acp')
 
