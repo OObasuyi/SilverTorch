@@ -10,6 +10,7 @@ from fireREST import FMC
 from netmiko import ConnectHandler
 from tqdm import tqdm
 from utilites import create_file_path
+from time import sleep
 
 pd.options.display.max_columns = None
 pd.options.display.max_rows = None
@@ -18,7 +19,7 @@ pd.options.mode.chained_assignment = None
 
 class AugmentedWorker:
 
-    def __init__(self, cred_file: str = 'cF.json', fmc_host='10.11.6.60', ftd_host='10.11.6.191', domain='Global',
+    def __init__(self, cred_file: str = 'cF.json', fmc_host='', ftd_host='', domain='Global',
             ppsm_location='ppsm_test_file.csv', access_policy='test_acp', zbr_bypass: dict = None,rule_prepend_name='firewall'):
         """
         @param cred_file: JSON file hosting user/pass information
@@ -43,7 +44,9 @@ class AugmentedWorker:
         self.ftd_username = creds.get('ftd_username') if creds.get('ftd_username') is not None else creds['fmc_username']
         self.ftd_password = creds.get('ftd_password') if creds.get('ftd_password') is not None else creds['fmc_password']
         self.domain = domain
-        self.ppsm_location = ppsm_location
+        # this is just a check the file MUST be the folder
+        # todo: run the script and move the file to the dir if not there already and in the main dir
+        self.ppsm_location = create_file_path('ingestion',ppsm_location)
         self.access_policy = access_policy
         self.zbr_bypass = zbr_bypass
         self.rule_prepend_name = rule_prepend_name
@@ -89,15 +92,38 @@ class AugmentedWorker:
         self.port_data = [tuple([str(x.get('name')), str(x.get('protocol')), str(x.get('port'))]) for x in port_objects]
         self.port_group_object = [tuple([str(x['name']), get_name_from_group_object(x.get('objects'),obj_type='port')]) for x in port_group_object]
 
+    @staticmethod
+    def _ip_address_check(x):
+        # check if user entered a hot bits in thier subnet mask
+        x = x.strip()
+        try:
+            if not 'any' in x:
+                # has to strick check so we can properly identifty if its a subnet or mistyped single IP.
+                return str(ip_network(x))
+            else:
+                return x
+        except:
+            return x.split('/')[0]
+
     def retrieve_ppsm(self):
         ppsm = pd.read_csv(self.ppsm_location)
         ppsm = ppsm.astype(str)
         ppsm = ppsm[ppsm['source'] != 'nan']
         for origin in ['source', 'destination']:
             # check if user entered a hot bits in thier subnet mask
-            ppsm[origin] = ppsm[origin].apply(lambda x: str(ip_network(x, strict=False)) if not 'any' in x else x)
+            ppsm[origin] = ppsm[origin].apply(lambda x: str(self._ip_address_check(x)))
             # fix so we dont have to refactor a bullion lines
-            ppsm[origin] = ppsm[origin].apply(lambda x: x.split('/')[0] if '/32' in x else x)
+            ppsm[origin] = ppsm[origin].apply(lambda x: (x.split('/')[0]).strip() if '/32' in x else x.strip())
+        # check if we have acceptable protocol for the API
+        na_protos = ppsm[~ppsm['protocol'].str.contains('TCP|UDP',regex=True)]
+        dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
+        fpath = create_file_path('CNI',f'non_applicable_protocols_{dt_now}.csv')
+        if not na_protos.empty:
+            self.logfmc.logger.warning(f'found protocols that cannot be used with this script\n Please enter them manually\n file location: {fpath}')
+            # make sure the user sees the msg with no input.
+            sleep(2)
+            na_protos.to_csv(fpath,index=False)
+        ppsm = ppsm[ppsm['protocol'].str.contains('TCP|UDP',regex=True)]
         return ppsm
 
     def create_fmc_object_names(self, keep_old_name=True):
@@ -544,7 +570,7 @@ class AugmentedWorker:
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
         ruleset_loc = create_file_path('predeploy_rules', f"fmc_ruleset_preload_configs_{dt_now}.csv", )
         ruleset.to_csv(ruleset_loc, index=False)
-        warn_msg = 'REVIEW RULE PREDEPLOY CSV FILE. ENTER "c" TO CONTINUE'
+        warn_msg = f'REVIEW PREDEPLOY RULESET FILE located at {ruleset_loc}. ENTER "c" TO CONTINUE'
         while True:
             self.logfmc.logger.warning(warn_msg)
             user_input = input()
@@ -681,20 +707,10 @@ class AugmentedWorker:
         # restart conn??
         self.rest_connection(reset=True)
         # create FMC rules
-        self.create_acp_rule(zone_of_last_resort='outside_zone')
+        self.create_acp_rule(zone_of_last_resort='External')
 
     @staticmethod
     def get_device_creds(cred_file):
         with open(cred_file,'r') as cf:
             return json.load(cf)
 
-
-if __name__ == "__main__":
-    fm = AugmentedWorker(cred_file='cF.json', ppsm_location='gfrs.csv',access_policy='test05')
-    fm.driver()
-    # try_block(val=fm.driver(),output_msg=True,)
-    # fm.fmc_net_port_info()
-    # fm.retrieve_ppsm()
-    # fm.create_fmc_object_names()
-    # fm.create_acp_rule()
-    # dat = fm.zone_to_ip_information()
