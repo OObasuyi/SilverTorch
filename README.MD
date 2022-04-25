@@ -1,6 +1,6 @@
-# FirePyower
+# FirePyower (AKA SilverTorch) 
 
-## STANDARD WORK FLOW OF THE PROGRAM
+## As Palpatine would say *DO IT*
 1. get CSV
 2. extract src,dst,ports,protocols(UDP/TCP),proposed Port name, ticket number
 3. Get zone and Fastpath (CEF equivalent) from sensor
@@ -56,3 +56,8 @@ Optional Args:
   --cred_file CRED_FILE
   -rule_prepend_name RULE_PREPEND_NAME
 ```
+## CAT-FAQs
+1. **Q. Well how does this deal with rule deduplication????**  
+A. it scans the ACP and if a rule has the same Source and Destination Zone **AND** IPs and port  it will drop the potential rule from getting staged  
+2. **Q. Thats fancy what about rules with nested objects???? hmmmm!**   
+A. It also scans recrusively to find potential duplicate IP or port objects.  
