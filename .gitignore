@@ -6,6 +6,9 @@
 /logs/
 *.pyc
 *.csv
-.idea/csv-plugin.xml
+.idea/
 /predeploy_rules/
-.idea/.name
+
+/testing/
+/CNI/
+/ingestion/
