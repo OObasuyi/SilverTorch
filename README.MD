@@ -19,9 +19,7 @@
 
 ## WIPS:
  1. better error and log handling
- 2. group IPs if there they close together and in the same zone. ie (1.1.1.1,1.1.1.2,1.1.1.3) can group to lessen the amount of staged rules. (maybe mono_increasing ???)
- 3. CREATING DUP GROUP OBJECTS FOR THE SAME KIND OF POLICY OR RUN 
- 4. Create a delete func when you have groups or rules you dont need. will need to redo network and port groups since this is ref #3.
+ 2. bug creating dup rules when missing an additional ip from a separate rule entry
 ## Main Dependencies
 pandas \
 netmiko \
