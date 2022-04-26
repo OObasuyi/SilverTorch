@@ -88,7 +88,7 @@ class AugmentedWorker:
                 self.net_group_object.append(tuple([str(x['name']), get_name_from_group_object(x.get('literals')),str(x['id'])]))
 
         self.net_data = [tuple([str(x['name']), str(x['value']),str(x['id'])]) for x in net_objects] + [tuple([str(x['name']), str(x['value']),str(x['id'])]) for x in host_objects]
-        self.port_data = [tuple([str(x.get('name')), str(x.get('protocol')), str(x.get('port')),str(x['id'])]) for x in port_objects]
+        self.port_data = [tuple([str(x.get('name')), str(x.get('protocol')), str(x.get('port')),str(x['id']), str(x['type'])]) for x in port_objects]
         self.port_group_object = [tuple([str(x['name']), get_name_from_group_object(x.get('objects'),obj_type='port'),str(x['id'])]) for x in port_group_object]
 
     @staticmethod
@@ -533,14 +533,15 @@ class AugmentedWorker:
         except Exception as error:
             raise Exception(error)
 
-        # there are generally three cases when it comes to rule grouping
-        case1 = ruleset.groupby(['source_network','port'])
-        case2 = ruleset.groupby(['destination_network','port'])
-        case3 = ruleset.groupby(['destination_network','source_network'])
+        # group by most distinct features
+        case1 = ruleset.groupby(['source_network', 'port'])
+        case2 = ruleset.groupby(['destination_network', 'port'])
+        case3 = ruleset.groupby(['destination_zone','source_zone','port'])
+        case4 = ruleset.groupby(['destination_network', 'source_network'])
 
         ruleset_holder = []
         dup_holder = []
-        for grouped_df,type_net in zip([case1,case2,case3],['source','destination','port']):
+        for grouped_df, type_net in zip([case1, case2, case3, case4], ['source', 'destination','zone','port']):
             group_listing = grouped_df.size()[grouped_df.size() > 1].index.values.tolist()
             for gl in group_listing:
                 concat_cols_type = 'destination' if type_net == 'source' else 'source'
@@ -548,7 +549,7 @@ class AugmentedWorker:
                 group = grouped_df.get_group(gl)
                 # get idx dups of the main ruleset to remove
                 dup_holder += group.index.to_list()
-                if type_net != 'port':
+                if type_net == 'source' or type_net == 'destination':
                     cct_net = f'{concat_cols_type}_network'
                     cct_zone = f'{concat_cols_type}_zone'
                     cct_net_data = list(set(group[cct_net].to_list()))
@@ -562,6 +563,14 @@ class AugmentedWorker:
                         group[cct_zone] = cct_zone_data[0]
                     else:
                         group[cct_zone] = sorted(cct_zone_data)
+                elif type_net == 'zone':
+                    agg_src_net = sorted(list(set(group['source_network'].tolist())))
+                    agg_dst_net = sorted(list(set(group['destination_network'].tolist())))
+                    # fit the agg lists into one cell since we captured the all the other info
+                    group = group.iloc[0]
+                    # dont take list items if the list only has 1 element
+                    group['source_network'] = agg_src_net if len(agg_src_net) > 1 else agg_src_net[0]
+                    group['destination_network'] = agg_dst_net if len(agg_dst_net) > 1 else agg_dst_net[0]
                 else:
                     cct_port = 'port'
                     cct_port_data = list(set(group[cct_port].to_list()))
@@ -570,12 +579,12 @@ class AugmentedWorker:
                         group[cct_port] = cct_port_data[0]
                     else:
                         group[cct_port] = sorted(cct_port_data)
+
                 ruleset_holder.append(group.to_dict())
 
-        ruleset.drop(ruleset.index[dup_holder],inplace=True)
-        ruleset = pd.concat([pd.DataFrame(ruleset_holder),ruleset],ignore_index=True)
-        ruleset.reset_index(inplace=True,drop=True)
-
+        ruleset.drop(ruleset.index[dup_holder], inplace=True)
+        ruleset = pd.concat([pd.DataFrame(ruleset_holder), ruleset], ignore_index=True)
+        ruleset.reset_index(inplace=True, drop=True)
         # since we grouped policy find the dups again and get rid of em
         ruleset = self.find_dup_policies(ruleset, acp_set)
         if ruleset.empty:
@@ -600,8 +609,6 @@ class AugmentedWorker:
 
         # create a bulk policy push operation
         charity_policy = []
-        net_obj_ids = [tuple([str(x['name']), str(x['type']), str(x['id']), ]) for x in self.fmc.object.network.get()] + [tuple([str(x['name']), str(x['type']), str(x['id']), ]) for x in self.fmc.object.host.get()]
-        port_obj_ids = [tuple([str(x['name']), str(x['type']), str(x['id']), ]) for x in self.fmc.object.port.get()]
         for i in tqdm(ruleset.index, desc='Loading bulk rule collection artifacts', total=len(ruleset.index), colour='green'):
             rule = ruleset.loc[i].to_dict()
             dh = {}
@@ -617,19 +624,41 @@ class AugmentedWorker:
                             # any is coming as list so lets strip it just in case this is due to how the policy lookup occurred
                             v = v[0]
                     else:
-                        # create group net or port objs by IDs since fmc cant create rules with more than 50 objects
-                        try:
-                            create_group_obj = {'objects': [{'type': name_ip_id[1], 'id': name_ip_id[2]} for ip in v for name_ip_id in net_obj_ids if ip == name_ip_id[0]], 'name': f"{self.rule_prepend_name}_net_group"}
-                            response = self.fmc.object.networkgroup.create(create_group_obj)
-                            if 'already exists' not in str(response):
-                                self._creation_check(response, create_group_obj['name'], output=False)
-                        except:
-                            create_group_obj = {'objects': [{'type': name_port_id[1], 'id': name_port_id[2]} for port in v for name_port_id in port_obj_ids if port == name_port_id[0]], 'name': f"{self.rule_prepend_name}_port_group"}
-                            response = self.fmc.object.portobjectgroup.create(create_group_obj)
-                            if 'already exists' not in str(response):
-                                self._creation_check(response, create_group_obj['name'], output=False)
+                        # get new port/net info per iteration so we dont create dup objects that have the same child IDs on creation if needed
+                        self.fmc_net_port_info()
+                        # the inner break controls the for-loop and need a mechism to break IF we matched on already created group
+                        matched = False
+                        while True:
+                            try:
+                                # if this object exist already use it
+                                for ip_lists in self.net_group_object:
+                                    if sorted(ip_lists[1]) == sorted(v):
+                                        v = ip_lists[0]
+                                        matched = True
+                                        break
+                                if matched:
+                                    break
+                                # create group net or port objs by IDs since fmc cant create rules with more than 50 objects
+                                create_group_obj = {'objects': [{'type': name_ip_id[1], 'id': name_ip_id[2]} for ip in v for name_ip_id in self.net_data if ip == name_ip_id[0]], 'name': f"{self.rule_prepend_name}_net_group_{randint(1, 100)}"}
+                                response = self.fmc.object.networkgroup.create(create_group_obj)
+                                if 'already exists' not in str(response):
+                                    self._creation_check(response, create_group_obj['name'], output=False)
+                            except:
+                                # if this object exist already use it
+                                for port_lists in self.port_group_object:
+                                    if sorted(port_lists[1]) == sorted(v):
+                                        v = port_lists[0]
+                                        matched = True
+                                        break
+                                if matched:
+                                    break
+                                create_group_obj = {'objects': [{'type': name_port_id[4], 'id': name_port_id[3]} for port in v for name_port_id in self.port_data if port == name_port_id[0]], 'name': f"{self.rule_prepend_name}_port_group_{randint(1, 100)}"}
+                                response = self.fmc.object.portobjectgroup.create(create_group_obj)
+                                if 'already exists' not in str(response):
+                                    self._creation_check(response, create_group_obj['name'], output=False)
 
-                        v = create_group_obj['name']
+                            v = create_group_obj['name']
+                            break
                 dh[k] = v
             rule = dh
 
@@ -732,7 +761,7 @@ class AugmentedWorker:
 
 
 if __name__ == "__main__":
-    augWork = AugmentedWorker(cred_file='cF.json', ppsm_location='gfrs.csv',access_policy='test06',ftd_host='10.11.6.191',fmc_host='10.11.6.60',rule_prepend_name='test_st_beta_1')
+    augWork = AugmentedWorker(cred_file='cF.json', ppsm_location='gfrs.csv',access_policy='test07',ftd_host='10.11.6.191',fmc_host='10.11.6.60',rule_prepend_name='test_st_beta_1')
     augWork.driver()
     # augWork.rest_connection()
     # augWork.fmc_net_port_info()
