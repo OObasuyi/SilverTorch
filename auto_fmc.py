@@ -83,13 +83,13 @@ class AugmentedWorker:
         self.net_group_object = []
         for x in net_group_object:
             try:
-                self.net_group_object.append(tuple([str(x['name']), get_name_from_group_object(x.get('objects'))]))
+                self.net_group_object.append(tuple([str(x['name']), get_name_from_group_object(x.get('objects')),str(x['id'])]))
             except:
-                self.net_group_object.append(tuple([str(x['name']), get_name_from_group_object(x.get('literals'))]))
+                self.net_group_object.append(tuple([str(x['name']), get_name_from_group_object(x.get('literals')),str(x['id'])]))
 
-        self.net_data = [tuple([str(x['name']), str(x['value'])]) for x in net_objects] + [tuple([str(x['name']), str(x['value'])]) for x in host_objects]
-        self.port_data = [tuple([str(x.get('name')), str(x.get('protocol')), str(x.get('port'))]) for x in port_objects]
-        self.port_group_object = [tuple([str(x['name']), get_name_from_group_object(x.get('objects'),obj_type='port')]) for x in port_group_object]
+        self.net_data = [tuple([str(x['name']), str(x['value']),str(x['id'])]) for x in net_objects] + [tuple([str(x['name']), str(x['value']),str(x['id'])]) for x in host_objects]
+        self.port_data = [tuple([str(x.get('name')), str(x.get('protocol')), str(x.get('port')),str(x['id'])]) for x in port_objects]
+        self.port_group_object = [tuple([str(x['name']), get_name_from_group_object(x.get('objects'),obj_type='port'),str(x['id'])]) for x in port_group_object]
 
     @staticmethod
     def _ip_address_check(x):
@@ -467,6 +467,24 @@ class AugmentedWorker:
         # if we dont know where this zone is coming it must be from external
         return {f"{type_}_zone": zone_of_last_resort, f'{type_}_network': self.ppsm[f'fmc_name_{type_}'][i]}
 
+    def del_fmc_objects(self,obj_id,type_,obj_type):
+        try:
+            if type_ == 'network':
+                if obj_type == 'net':
+                    try:
+                        self.fmc.object.host.delete(obj_id)
+                    except:
+                        self.fmc.object.network.delete(obj_id)
+                elif obj_type == 'net_group':
+                    self.fmc.object.networkgroup.delete(obj_id)
+            elif type_ == 'port':
+                if obj_type == 'port':
+                    self.fmc.object.port.delete(obj_id)
+                elif obj_type == 'port_group':
+                    self.fmc.object.portobjectgroup.delete(obj_id)
+        except Exception as error:
+            self.logfmc.logger.error(f'Cannot delete {obj_id} of {type_} \n received code: {error}')
+
     def create_acp_rule(self, zone_of_last_resort='outside'):
         ruleset = []
 
@@ -563,7 +581,7 @@ class AugmentedWorker:
         if ruleset.empty:
             raise Exception('NO RULES TO DEPLOY')
 
-        # real cols are for function lookuo use
+        # real cols are for function lookup use
         ruleset = ruleset.loc[:, ~ruleset.columns.str.startswith('real')]
 
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
@@ -596,19 +614,17 @@ class AugmentedWorker:
                     # dont need create objs for zones or any ips,zone
                     if 'zone' in k or 'any' == v[0]:
                         if 'any' == v[0]:
-                            # any is coming as list so lets strip it just in case this is due to how the policy lookup occured
+                            # any is coming as list so lets strip it just in case this is due to how the policy lookup occurred
                             v = v[0]
                     else:
                         # create group net or port objs by IDs since fmc cant create rules with more than 50 objects
                         try:
-                            create_group_obj = {'objects': [{'type': name_ip_id[1], 'id': name_ip_id[2]} for ip in v for name_ip_id in net_obj_ids if ip == name_ip_id[0]]}
-                            create_group_obj['name'] = f"{self.rule_prepend_name}_net_group_{randint(0, 200000)}"
+                            create_group_obj = {'objects': [{'type': name_ip_id[1], 'id': name_ip_id[2]} for ip in v for name_ip_id in net_obj_ids if ip == name_ip_id[0]], 'name': f"{self.rule_prepend_name}_net_group"}
                             response = self.fmc.object.networkgroup.create(create_group_obj)
                             if 'already exists' not in str(response):
                                 self._creation_check(response, create_group_obj['name'], output=False)
                         except:
-                            create_group_obj = {'objects': [{'type': name_port_id[1], 'id': name_port_id[2]} for port in v for name_port_id in port_obj_ids if port == name_port_id[0]]}
-                            create_group_obj['name'] = f"{self.rule_prepend_name}_port_group_{randint(0,200000)}"
+                            create_group_obj = {'objects': [{'type': name_port_id[1], 'id': name_port_id[2]} for port in v for name_port_id in port_obj_ids if port == name_port_id[0]], 'name': f"{self.rule_prepend_name}_port_group"}
                             response = self.fmc.object.portobjectgroup.create(create_group_obj)
                             if 'already exists' not in str(response):
                                 self._creation_check(response, create_group_obj['name'], output=False)
@@ -716,5 +732,11 @@ class AugmentedWorker:
 
 
 if __name__ == "__main__":
-    augWork = AugmentedWorker(cred_file='cred_file.json', ppsm_location='pps_file.csv',access_policy='acp')
+    augWork = AugmentedWorker(cred_file='cF.json', ppsm_location='gfrs.csv',access_policy='test06',ftd_host='10.11.6.191',fmc_host='10.11.6.60',rule_prepend_name='test_st_beta_1')
+    augWork.driver()
+    # augWork.rest_connection()
+    # augWork.fmc_net_port_info()
+    # gps = augWork.net_data
+    # for item in tqdm(gps,total=len(gps)):
+    #     augWork.del_fmc_objects(obj_id=item[-1],type_='network',obj_type='net')
 

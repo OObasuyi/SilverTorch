@@ -14,7 +14,7 @@ def terminal_entry():
     optional_args = parser.add_argument_group(title='Optional Args')
     optional_args.add_argument('--domain',default='Global',action="store",type=str)
     optional_args.add_argument('--zbr_bypass',default=None,action="store",type=str)
-    optional_args.add_argument('--cred_file', default='cf.JSON', type=str)
+    optional_args.add_argument('--cred_file', default='cF.json', type=str)
     optional_args.add_argument('-rule_prepend_name', default='auto_api_entry', type=str)
 
     args = parser.parse_args()
