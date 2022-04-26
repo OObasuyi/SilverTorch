@@ -19,6 +19,7 @@
 
 ## WIPS:
  1. better error and log handling
+ 2. group IPs if there they close together and in the same zone. ie (1.1.1.1,1.1.1.2,1.1.1.3) can group to lessen the amount of staged rules. (maybe mono_increasing ???)
 
 ## Main Dependencies
 pandas \
