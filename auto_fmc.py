@@ -134,7 +134,8 @@ class AugmentedWorker:
                 else:
                     return net
             else:
-                return f"{self.ppsm['service'][x]}"
+                # if the service is not type-of-port format; make it so
+                return (self.ppsm['service'][x]).replace(" ","-")
 
         # drop trailing decimal point from str conversion
         self.ppsm['port_1'] = self.ppsm['port_1'].apply(lambda x: x.split('.')[0])
