@@ -20,7 +20,7 @@ pd.options.mode.chained_assignment = None
 class AugmentedWorker:
 
     def __init__(self, cred_file: str = 'cF.json', fmc_host='', ftd_host='', domain='Global',
-            ppsm_location='ppsm_test_file.csv', access_policy='test_acp', zbr_bypass: dict = None,rule_prepend_name='firewall'):
+            ppsm_location='ppsm_test_file.csv', access_policy='test_acp', zbr_bypass: dict = None,rule_prepend_name='firewall',zone_of_last_resort='outside'):
         """
         @param cred_file: JSON file hosting user/pass information
         @param fmc_host: FMC domain or IP address
@@ -31,6 +31,7 @@ class AugmentedWorker:
         @param zbr_bypass: (experimental) if you want to manually assign the security zone to rules instead of doing the zone to IP lookup make sure the zone and rules rows match exactly!
         @param rule_prepend_name: an additive on what to call the staged rule. ie a rule will look like facetime_rule_allow_facetime_5324
         where facetime_rule is the prepend var, allow_facetime is the comment and number is unique set of characters to distinguish the rule
+        @@param zone_of_last_resort: this is needed when we dont know where a route lives relative to their Zone ie we know that a IP is northbound of our gateway or outside interface.
         """
         creds = self.get_device_creds(cred_file)
         # Sec-lint #1
@@ -49,6 +50,7 @@ class AugmentedWorker:
         self.access_policy = access_policy
         self.zbr_bypass = zbr_bypass
         self.rule_prepend_name = rule_prepend_name
+        self.zone_of_last_resort = zone_of_last_resort
         self.logfmc = LogCollector()
 
     def _creation_check(self,response, new_obj, output=True):
@@ -453,7 +455,7 @@ class AugmentedWorker:
             pass
         return ruleset
 
-    def _get_sn_match(self, type_, i, zone_of_last_resort):
+    def _get_sn_match(self, type_, i):
         if self.ppsm[type_][i] == 'any':
             return {f"{type_}_zone": 'any', f'{type_}_network': 'any'}
         elif self.zbr_bypass is not None:
@@ -461,12 +463,20 @@ class AugmentedWorker:
             return {f"{type_}_zone": str(self.zbr_bypass[type_][i]), f'{type_}_network': self.ppsm[f'fmc_name_{type_}'][i]}
 
         ppsm_subnet = ip_network(self.ppsm[type_][i])
-        for p in self.zone_ip_info.index:
-            asp_subnet = self.zone_ip_info['ip_cidr'][p]
-            if ppsm_subnet.subnet_of(ip_network(asp_subnet)):
-                return {f"{type_}_zone": self.zone_ip_info['ZONE'][p], f'{type_}_network': self.ppsm[f'fmc_name_{type_}'][i]}
+        # if we need to find where a host address lives exactly
+        if '/' not in self.ppsm[type_][i] or '/32' in self.ppsm[type_][i]:
+            for p in self.zone_ip_info.index:
+                asp_subnet = self.zone_ip_info['ip_cidr'][p]
+                if ppsm_subnet.subnet_of(ip_network(asp_subnet)):
+                    return {f"{type_}_zone": self.zone_ip_info['ZONE'][p], f'{type_}_network': self.ppsm[f'fmc_name_{type_}'][i]}
+        # if we need to find all zones a subnet might reside
+        elif '/' in self.ppsm[type_][i]:
+            zone_group = tuple(list(set([self.zone_ip_info['ZONE'][p] for p in self.zone_ip_info.index if ip_network(self.zone_ip_info['ip_cidr'][p]).subnet_of(ppsm_subnet)])))
+            if len(zone_group) != 0:
+                zone_group = zone_group if len(zone_group) > 1 else zone_group[0]
+                return {f"{type_}_zone": zone_group, f'{type_}_network': self.ppsm[f'fmc_name_{type_}'][i]}
         # if we dont know where this zone is coming it must be from external
-        return {f"{type_}_zone": zone_of_last_resort, f'{type_}_network': self.ppsm[f'fmc_name_{type_}'][i]}
+        return {f"{type_}_zone": self.zone_of_last_resort, f'{type_}_network': self.ppsm[f'fmc_name_{type_}'][i]}
 
     def del_fmc_objects(self,obj_id,type_,obj_type):
         try:
@@ -486,7 +496,7 @@ class AugmentedWorker:
         except Exception as error:
             self.logfmc.logger.error(f'Cannot delete {obj_id} of {type_} \n received code: {error}')
 
-    def create_acp_rule(self, zone_of_last_resort='outside'):
+    def create_acp_rule(self):
         ruleset = []
 
         def fix_object(x):
@@ -508,8 +518,8 @@ class AugmentedWorker:
         # sort rules in a pretty format
         for i in self.ppsm.index:
             rule_flow = {}
-            src_flow = self._get_sn_match('source', i, zone_of_last_resort)
-            dst_flow = self._get_sn_match('destination', i, zone_of_last_resort)
+            src_flow = self._get_sn_match('source', i)
+            dst_flow = self._get_sn_match('destination', i)
             # block double zone
             if src_flow["source_zone"] == dst_flow["destination_zone"]:
                 continue
@@ -586,6 +596,9 @@ class AugmentedWorker:
         ruleset.drop(ruleset.index[dup_holder], inplace=True)
         ruleset = pd.concat([pd.DataFrame(ruleset_holder), ruleset], ignore_index=True)
         ruleset.reset_index(inplace=True, drop=True)
+        # remove tuples from multi-zoned rows
+        for z_name in ['source','destination']:
+            ruleset[f'{z_name}_zone'] = ruleset[f'{z_name}_zone'].apply(lambda x: [v for v in x ] if isinstance(x,tuple) else x)
         # since we grouped policy find the dups again and get rid of em
         ruleset = self.find_dup_policies(ruleset, acp_set)
         if ruleset.empty:
@@ -752,7 +765,7 @@ class AugmentedWorker:
         # restart conn??
         self.rest_connection(reset=True)
         # create FMC rules
-        self.create_acp_rule(zone_of_last_resort='External')
+        self.create_acp_rule()
 
     @staticmethod
     def get_device_creds(cred_file):
@@ -762,7 +775,7 @@ class AugmentedWorker:
 
 
 if __name__ == "__main__":
-    augWork = AugmentedWorker(cred_file='cF.json', ppsm_location='gfrs.csv',access_policy='test07',ftd_host='10.11.6.191',fmc_host='10.11.6.60',rule_prepend_name='test_st_beta_1')
+    augWork = AugmentedWorker(cred_file='cF.json', ppsm_location='gfrs.csv',access_policy='test08',ftd_host='10.11.6.191',fmc_host='10.11.6.60',rule_prepend_name='test_st_beta_1',zone_of_last_resort='outside_zone')
     augWork.driver()
     # augWork.rest_connection()
     # augWork.fmc_net_port_info()
