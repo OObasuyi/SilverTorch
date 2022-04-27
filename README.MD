@@ -1,4 +1,5 @@
 # FirePyower (AKA SilverTorch) 
+This script stages rules into the FMC. It also inserts rules based on their port/application to create a more app-controlled firewall.
 
 ## As Palpatine would say *DO IT*
 1. get CSV
