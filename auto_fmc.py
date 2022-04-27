@@ -573,7 +573,19 @@ class AugmentedWorker:
                     if len(cct_zone_data) == 1:
                         group[cct_zone] = cct_zone_data[0]
                     else:
-                        group[cct_zone] = sorted(cct_zone_data)
+                        try:
+                            group[cct_zone] = sorted(cct_zone_data)
+                        except:
+                            # needed due to [(many zones),zone,zone] problem
+                            all_zones = []
+                            for pull_all in cct_zone_data:
+                                if isinstance(pull_all,tuple):
+                                    for i in pull_all:
+                                        all_zones.append(i)
+                                else:
+                                    all_zones.append(pull_all)
+                            group[cct_zone] = sorted(all_zones)
+
                 elif type_net == 'zone':
                     agg_src_net = sorted(list(set(group['source_network'].tolist())))
                     agg_dst_net = sorted(list(set(group['destination_network'].tolist())))
@@ -775,7 +787,7 @@ class AugmentedWorker:
 
 
 if __name__ == "__main__":
-    augWork = AugmentedWorker(cred_file='cF.json', ppsm_location='gfrs.csv',access_policy='test08',ftd_host='10.11.6.191',fmc_host='10.11.6.60',rule_prepend_name='test_st_beta_1',zone_of_last_resort='outside_zone')
+    augWork = AugmentedWorker(cred_file='cF.json', ppsm_location='gfrs.csv',access_policy='test09',ftd_host='10.11.6.191',fmc_host='10.11.6.60',rule_prepend_name='test_st_beta_1',zone_of_last_resort='outside_zone')
     augWork.driver()
     # augWork.rest_connection()
     # augWork.fmc_net_port_info()
