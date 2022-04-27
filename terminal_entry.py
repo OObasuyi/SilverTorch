@@ -10,12 +10,13 @@ def terminal_entry():
     mandatory_args.add_argument('-ftd_host',required=True,type=str)
     mandatory_args.add_argument('-ppsm_location',required=True,type=str)
     mandatory_args.add_argument('-access_policy',required=True,type=str)
+    mandatory_args.add_argument('-rule_prepend_name',required=True,type=str)
+    
 
     optional_args = parser.add_argument_group(title='Optional Args')
     optional_args.add_argument('--domain',default='Global',action="store",type=str)
     optional_args.add_argument('--zbr_bypass',default=None,action="store",type=str)
     optional_args.add_argument('--cred_file', default='cF.json', type=str)
-    optional_args.add_argument('-rule_prepend_name', default='auto_api_entry', type=str)
 
     args = parser.parse_args()
     # handle optional None input
