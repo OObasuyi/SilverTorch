@@ -61,6 +61,8 @@ Optional Args:
   --domain DOMAIN
   --zbr_bypass ZBR_BYPASS
   --cred_file CRED_FILE
+   --same_creds SAME_CREDS True or False/case-sensitive
+
 ```
 ## CAT-FAQs
 1. **Q. Well how does this deal with rule deduplication????**  
