@@ -14,11 +14,11 @@ This script stages rules into the FMC. It also inserts rules based on their port
 1. it more than likely possible to pull the zone info by looking up the logical interface name but for now please name the logical interface the same as the security zone.
 2. <= 7.0 ver of FMC API only allows TCP or UDP for protocols to used.
 
-## Special Cases:
+## Special Cases
 1. if you new ip information and dont want to use the fastpath info to find the correct zone to put the IP, the zbr_bypass argument MUST match the row lines of the PPS rows
 2. any IP that doesn't have a fastpath match can have a zone assigned to it using the zone_of_last_resort argument
 
-## WIPS:
+## WIPS
  1. better error and log handling
 ## Main Dependencies
 pandas \
