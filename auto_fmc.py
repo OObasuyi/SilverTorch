@@ -9,7 +9,7 @@ import pandas as pd
 from fireREST import FMC
 from netmiko import ConnectHandler
 from tqdm import tqdm
-from utilites import create_file_path
+from utilites import create_file_path,deprecated
 from time import sleep
 
 pd.options.display.max_columns = None
@@ -19,10 +19,10 @@ pd.options.mode.chained_assignment = None
 
 class AugmentedWorker:
 
-    def __init__(self, cred_file: str = 'cF.json', fmc_host='', ftd_host='', domain='Global',
-            ppsm_location='ppsm_test_file.csv', access_policy='test_acp', zbr_bypass: dict = None,rule_prepend_name='firewall',zone_of_last_resort='outside'):
+    def __init__(self, cred_file: str = None, fmc_host='', ftd_host='', domain='Global',
+            ppsm_location='ppsm_test_file.csv', access_policy='test_acp', zbr_bypass: dict = None,rule_prepend_name='firewall',zone_of_last_resort='outside',same_cred=True):
         """
-        @param cred_file: JSON file hosting user/pass information
+        @param cred_file: JSON file hosting user/pass information DEPRECATED
         @param fmc_host: FMC domain or IP address
         @param ftd_host: FTD domain or IP address
         @param domain: used to select the tenant in FMC
@@ -32,18 +32,19 @@ class AugmentedWorker:
         @param rule_prepend_name: an additive on what to call the staged rule. ie a rule will look like facetime_rule_allow_facetime_5324
         where facetime_rule is the prepend var, allow_facetime is the comment and number is unique set of characters to distinguish the rule
         @@param zone_of_last_resort: this is needed when we dont know where a route lives relative to their Zone ie we know that a IP is northbound of our gateway or outside interface.
+        @@param same_cred: whether all creds to login devices use the same user and password combination
         """
-        creds = self.get_device_creds(cred_file)
+        creds = self.get_device_creds(cred_file=cred_file,same_cred=same_cred)
         # Sec-lint #1
         for v in list(creds.values()):
             if not isinstance(v,(str,int,float)):
-                raise ValueError(f'Cred file has a value that is not allowed for this program. returned value of {type(v)}')
+                raise ValueError(f'Cred file has a value that is not allowed for this script. returned value of {type(v)}')
         self.fmc_host = fmc_host
         self.ftd_host = ftd_host
         self.fmc_username = creds['fmc_username']
         self.fmc_password = creds['fmc_password']
-        self.ftd_username = creds.get('ftd_username') if creds.get('ftd_username') is not None else creds['fmc_username']
-        self.ftd_password = creds.get('ftd_password') if creds.get('ftd_password') is not None else creds['fmc_password']
+        self.ftd_username = creds['ftd_username']
+        self.ftd_password = creds['ftd_password']
         self.domain = domain
         # this is just a check the file MUST be the folder
         self.ppsm_location = create_file_path('ingestion',ppsm_location)
@@ -780,14 +781,34 @@ class AugmentedWorker:
         self.create_acp_rule()
 
     @staticmethod
-    def get_device_creds(cred_file):
+    @deprecated
+    def _get_device_creds(cred_file):
         cred_file = create_file_path('safe',cred_file)
         with open(cred_file,'r') as cf:
-            return json.load(cf)
+            return json.load(cf) \
+
+
+    def get_device_creds(self, cred_file=None,same_cred=True):
+        if cred_file is not None:
+            return self._get_device_creds(cred_file)
+        ftd_u = None
+        ftd_p = None
+
+        fmc_u = input("FMC USERNAME:")
+        fmc_p = input("FMC PASSWORD:")
+        if not same_cred:
+            ftd_u = input("FTD USERNAME:")
+            ftd_p = input("FTD PASSWORD:")
+        ftd_u = ftd_u if ftd_u is not None else fmc_u
+        ftd_p = ftd_p if ftd_p is not None else fmc_p
+
+        cdict = {"fmc_username": fmc_u, "fmc_password": fmc_p, "ftd_username": ftd_u, "ftd_password": ftd_p}
+        return cdict
+
 
 
 if __name__ == "__main__":
-    augWork = AugmentedWorker(cred_file='cF.json', ppsm_location='gfrs.csv',access_policy='test09',ftd_host='10.11.6.191',fmc_host='10.11.6.60',rule_prepend_name='test_st_beta_1',zone_of_last_resort='outside_zone')
+    augWork = AugmentedWorker(ppsm_location='gfrs.csv',access_policy='test09',ftd_host='10.11.6.191',fmc_host='10.11.6.60',rule_prepend_name='test_st_beta_1',zone_of_last_resort='outside_zone',same_cred=False)
     augWork.driver()
     # augWork.rest_connection()
     # augWork.fmc_net_port_info()

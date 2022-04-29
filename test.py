@@ -54,19 +54,20 @@ def gen_fake_rule_set(amount_of_rules=300,upload=False):
         with open('zone_dat.pkl', 'rb') as pkf:
             zone_dat = pickle.load(pkf)
 
-    slacker.zbr_bypass = zone_dat
-    slacker.ppsm = gfrs_pd
-    slacker.fmc_net_port_info()
-    slacker.create_fmc_object_names()
-    slacker.create_acp_rule()
+    # slacker.zbr_bypass = zone_dat
+    # slacker.ppsm = gfrs_pd
+    # slacker.fmc_net_port_info()
+    # slacker.create_fmc_object_names()
+    # slacker.create_acp_rule()
 
 
-def get_zbf_files_test():
-    zbf_dict = utilites.csv_to_dict('zone_info.csv')
-    slacker = AugmentedWorker(creds=dict(fmc_username='api_admin', fmc_password='1qaz!QAZ'),zbr_bypass=zbf_dict)
+# def get_zbf_files_test():
+#     zbf_dict = utilites.csv_to_dict('zone_info.csv')
+#     slacker = AugmentedWorker(creds=dict(fmc_username='api_admin', fmc_password='1qaz!QAZ'),zbr_bypass=zbf_dict)
+
 
 
 if __name__ == "__main__":
     slacker = AugmentedWorker(creds = dict(fmc_username='api_admin',fmc_password='1qaz!QAZ'))
-    slacker.rest_connection()
-    gen_fake_rule_set(25,upload=True)
+    # slacker.rest_connection()
+    # gen_fake_rule_set(25,upload=True)
