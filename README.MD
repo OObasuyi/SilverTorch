@@ -20,9 +20,6 @@ This script stages rules into the FMC. It also inserts rules based on their port
 
 ## WIPS:
  1. better error and log handling
- 2. bug creating dup rules when missing an additional ip from a separate rule entry
- 3. save predeploy to dir outside the project dir can be specified by input
- 4. ask for user creds and encrpyt them
 ## Main Dependencies
 pandas \
 netmiko \
