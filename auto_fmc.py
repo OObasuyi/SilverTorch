@@ -116,6 +116,9 @@ class AugmentedWorker:
             ppsm[origin] = ppsm[origin].apply(lambda x: str(self._ip_address_check(x)))
             # fix so we dont have to refactor a bullion lines
             ppsm[origin] = ppsm[origin].apply(lambda x: (x.split('/')[0]).strip() if '/32' in x else x.strip())
+        # strip extra spaces in cols
+        for col in ppsm.columns:
+            ppsm[col] = ppsm[col].apply(lamba x: x.strip())
         # check if we have acceptable protocol for the API
         na_protos = ppsm[~ppsm['protocol'].str.contains('TCP|UDP',regex=True)]
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
