@@ -116,6 +116,9 @@ class AugmentedWorker:
             ppsm[origin] = ppsm[origin].apply(lambda x: str(self._ip_address_check(x)))
             # fix so we dont have to refactor a bullion lines
             ppsm[origin] = ppsm[origin].apply(lambda x: (x.split('/')[0]).strip() if '/32' in x else x.strip())
+        # strip extra spaces in cols
+        for col in ppsm.columns:
+            ppsm[col] = ppsm[col].apply(lamba x: x.strip())
         # check if we have acceptable protocol for the API
         na_protos = ppsm[~ppsm['protocol'].str.contains('TCP|UDP',regex=True)]
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
@@ -549,11 +552,16 @@ class AugmentedWorker:
         case1 = ruleset.groupby(['source_network', 'port'])
         case2 = ruleset.groupby(['destination_network', 'port'])
         case3 = ruleset.groupby(['destination_zone','source_zone','port'])
-        case4 = ruleset.groupby(['destination_network', 'source_network'])
+        # this case will group ports together SINCE this is a port based script 1 rule = 1 port
+        # PLUS I was getting dups due the case3 and case4 not de-duping!! 
+        # case4 = ruleset.groupby(['destination_network', 'source_network'])
 
         ruleset_holder = []
         dup_holder = []
         for grouped_df, type_net in zip([case1, case2, case3, case4], ['source', 'destination','zone','port']):
+            # todo: find a better way to implment port grouping if at all!
+            if grouped_df == case4:
+                continue
             group_listing = grouped_df.size()[grouped_df.size() > 1].index.values.tolist()
             for gl in group_listing:
                 concat_cols_type = 'destination' if type_net == 'source' else 'source'
