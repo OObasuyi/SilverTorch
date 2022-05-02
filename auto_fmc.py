@@ -129,6 +129,7 @@ class AugmentedWorker:
             sleep(2)
             na_protos.to_csv(fpath,index=False)
         ppsm = ppsm[ppsm['protocol'].str.contains('TCP|UDP',regex=True)]
+        # todo: to prevent rate-limit group ppsm by service,src,dest and create fmc objects like that
         return ppsm
 
     def create_fmc_object_names(self, keep_old_name=True):
