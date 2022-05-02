@@ -118,7 +118,7 @@ class AugmentedWorker:
             ppsm[origin] = ppsm[origin].apply(lambda x: (x.split('/')[0]).strip() if '/32' in x else x.strip())
         # strip extra spaces in cols
         for col in ppsm.columns:
-            ppsm[col] = ppsm[col].apply(lamba x: x.strip())
+            ppsm[col] = ppsm[col].apply(lambda x: x.strip())
         # check if we have acceptable protocol for the API
         na_protos = ppsm[~ppsm['protocol'].str.contains('TCP|UDP',regex=True)]
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
@@ -552,11 +552,16 @@ class AugmentedWorker:
         case1 = ruleset.groupby(['source_network', 'port'])
         case2 = ruleset.groupby(['destination_network', 'port'])
         case3 = ruleset.groupby(['destination_zone','source_zone','port'])
+        # this case will group ports together SINCE this is a port based script 1 rule = 1 port
+        # PLUS I was getting dups due the case3 and case4 not de-duping!! 
         case4 = ruleset.groupby(['destination_network', 'source_network'])
 
         ruleset_holder = []
         dup_holder = []
         for grouped_df, type_net in zip([case1, case2, case3, case4], ['source', 'destination','zone','port']):
+            # todo: find a better way to implment port grouping if at all!
+            if grouped_df == case4:
+                continue
             group_listing = grouped_df.size()[grouped_df.size() > 1].index.values.tolist()
             for gl in group_listing:
                 concat_cols_type = 'destination' if type_net == 'source' else 'source'
@@ -606,8 +611,14 @@ class AugmentedWorker:
                         group[cct_port] = cct_port_data[0]
                     else:
                         group[cct_port] = sorted(cct_port_data)
-
-                ruleset_holder.append(group.to_dict())
+                # dup policy check
+                dup_seen = False
+                for rule_group in ruleset_holder:
+                    if group.to_dict() == rule_group:
+                        dup_seen = True
+                        break
+                if not dup_seen:
+                    ruleset_holder.append(group.to_dict())
 
         ruleset.drop(ruleset.index[dup_holder], inplace=True)
         ruleset = pd.concat([pd.DataFrame(ruleset_holder), ruleset], ignore_index=True)
