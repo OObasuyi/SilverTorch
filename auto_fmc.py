@@ -15,6 +15,7 @@ from time import sleep
 pd.options.display.max_columns = None
 pd.options.display.max_rows = None
 pd.options.mode.chained_assignment = None
+# todo: if not alpanum in service chnage it with re to '-' char
 
 
 class AugmentedWorker:
