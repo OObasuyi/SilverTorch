@@ -20,6 +20,8 @@ This script stages rules into the FMC. It also inserts rules based on their port
 
 ## WIPS
  1. better error and log handling
+ 2.  RATE LIMITING ISSUE
+ 3.  CASE4 DEDUPING
 ## Main Dependencies
 pandas \
 netmiko \
