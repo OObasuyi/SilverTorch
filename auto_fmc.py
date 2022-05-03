@@ -260,34 +260,35 @@ class AugmentedWorker:
         return route_zone_info
 
     def find_nested_group_objects(self, object_item):
-        if not isinstance(object_item, list):
-            return object_item
-
-        item_holder = []
-        for obj_info in object_item:
-            if 'group' not in obj_info.get('type').lower():
-                item_holder.append(obj_info.get('name'))
-
-            elif 'group' in obj_info.get('type').lower():
-                if 'port' not in obj_info.get('type').lower():
-                    for i in self.net_group_object:
-                        if i[0] == obj_info['name']:
-                            for v in i[1]:
-                                for ip in self.net_data:
-                                    if v == ip[0]:
-                                        item_holder.append(ip[0])
-                else:
-                    for i in self.port_group_object:
-                        if obj_info.get('name') == i[0]:
-                            for v in i[1]:
-                                for ports in self.port_data:
-                                    if v[0] == ports[0]:
-                                        item_holder.append(ports[0])
-
-        if len(item_holder) == 1:
-            return item_holder[0]
-        sorted(item_holder)
-        return item_holder
+        try:
+            if not isinstance(object_item, list):
+                return object_item
+            item_holder = []
+            for obj_info in object_item:
+                if 'group' not in obj_info.get('type').lower():
+                    item_holder.append(obj_info.get('name'))
+                elif 'group' in obj_info.get('type').lower():
+                    if 'port' not in obj_info.get('type').lower():
+                        for i in self.net_group_object:
+                            if i[0] == obj_info['name']:
+                                for v in i[1]:
+                                    for ip in self.net_data:
+                                        if v == ip[0]:
+                                            item_holder.append(ip[0])
+                    else:
+                        for i in self.port_group_object:
+                            if obj_info.get('name') == i[0]:
+                                for v in i[1]:
+                                    for ports in self.port_data:
+                                        if v[0] == ports[0]:
+                                            item_holder.append(ports[0])
+            if len(item_holder) == 1:
+                return item_holder[0]
+            sorted(item_holder)
+            return item_holder
+        except Exception as error:
+            self.logfmc.logger.debug(error)
+            return None
 
     def find_dup_policies(self, ruleset, acp_set):
         def flatten(d):
@@ -324,26 +325,11 @@ class AugmentedWorker:
         changed_ruleset = []
         for i in current_ruleset:
             subset_rule = {}
-            try:
-                subset_rule['src_z'] = self.find_nested_group_objects(i.get('sourceZones').get('objects'))
-            except:
-                subset_rule['src_z'] = None
-            try:
-                subset_rule['dst_z'] = self.find_nested_group_objects(i.get('destinationZones').get('objects'))
-            except:
-                subset_rule['dst_z'] = None
-            try:
-                subset_rule['source'] = self.find_nested_group_objects(i.get('sourceNetworks').get('objects'))
-            except:
-                subset_rule['source'] = None
-            try:
-                subset_rule['destination'] = self.find_nested_group_objects(i.get('destinationNetworks').get('objects'))
-            except:
-                subset_rule['destination'] = None
-            try:
-                subset_rule['port'] = self.find_nested_group_objects(i.get('destinationPorts').get('objects'))
-            except:
-                subset_rule['port'] = None
+            subset_rule['src_z'] = self.find_nested_group_objects(i.get('sourceZones').get('objects'))
+            subset_rule['dst_z'] = self.find_nested_group_objects(i.get('destinationZones').get('objects'))
+            subset_rule['source'] = self.find_nested_group_objects(i.get('sourceNetworks').get('objects'))
+            subset_rule['destination'] = self.find_nested_group_objects(i.get('destinationNetworks').get('objects'))
+            subset_rule['port'] = self.find_nested_group_objects(i.get('destinationPorts').get('objects'))
             changed_ruleset.append(subset_rule)
         current_ruleset = changed_ruleset
         current_ruleset = pd.DataFrame(current_ruleset)
