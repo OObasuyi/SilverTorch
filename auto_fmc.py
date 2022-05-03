@@ -15,7 +15,6 @@ from time import sleep
 pd.options.display.max_columns = None
 pd.options.display.max_rows = None
 pd.options.mode.chained_assignment = None
-# todo: if not alpanum in service chnage it with re to '-' char
 
 
 class AugmentedWorker:
@@ -274,18 +273,16 @@ class AugmentedWorker:
                     for i in self.net_group_object:
                         if i[0] == obj_info['name']:
                             for v in i[1]:
-                                try:
-                                    item_holder.append(v.get('name'))
-                                except:
-                                    item_holder.append(v)
+                                for ip in self.net_data:
+                                    if v == ip[0]:
+                                        item_holder.append(ip[0])
                 else:
                     for i in self.port_group_object:
                         if obj_info.get('name') == i[0]:
                             for v in i[1]:
-                                try:
-                                    item_holder.append(v.get('name'))
-                                except:
-                                    item_holder.append(v)
+                                for ports in self.port_data:
+                                    if v[0] == ports[0]:
+                                        item_holder.append(ports[0])
 
         if len(item_holder) == 1:
             return item_holder[0]
@@ -305,6 +302,22 @@ class AugmentedWorker:
                 else:
                     out[key] = val
             return out
+
+        def fdp_grouper(p,type_):
+            if type_ == 'ip':
+                if not isinstance(p, list):
+                    for ipx in self.net_data:
+                        if p == ipx[0]:
+                            return ipx[1]
+                else:
+                    return sorted(list(set(ipx[1] for ruleip in p for ipx in self.net_data if ruleip == ipx[0])))
+            if type_ == 'port':
+                if not isinstance(p, list):
+                    for px in self.port_data:
+                        if p == px[0]:
+                            return f"{px[1]}:{px[2]}"
+                else:
+                    return sorted(list(set(f"{px[1]}:{px[2]}" for rulep in p for px in self.port_data if rulep == px[0])))
 
         # find existing policy in fmc
         current_ruleset = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_set['id'])
@@ -338,36 +351,26 @@ class AugmentedWorker:
             self.logfmc.logger.error('nothing in current ruleset')
             return ruleset
 
-        # get group objects directly added to current rule
-        for ip in ['source', 'destination', 'port']:
-            grouped_idx = current_ruleset[current_ruleset[ip].apply(lambda x: True if isinstance(x, list) else False)].index.to_list()
-            if len(grouped_idx) > 0:
-                for gidx in grouped_idx:
-                    real_grouped_ip = []
-                    for cri in current_ruleset[ip][gidx]:
-                        dat_list = self.net_data if ip != 'port' else self.port_data
-                        for snd in dat_list:
-                            if cri == snd[0]:
-                                real_dat = snd[1] if ip != 'port' else f'{snd[1]}:{snd[2]}'
-                                real_grouped_ip.append(real_dat)
-                    current_ruleset.loc[current_ruleset[ip].index == gidx, f'real_{ip}'] = '|'.join(real_grouped_ip)
+        self.logfmc.logger.warning("getting real IPs from named network objects")
+        for ip in ['source', 'destination']:
+            current_ruleset[f'real_{ip}'] = current_ruleset[ip].apply(lambda p: fdp_grouper(p, 'ip'))
+            ruleset[f'real_{ip}'] = ruleset[f'{ip}_network'].apply(lambda p: fdp_grouper(p, 'ip'))
 
-        # transformed named objs to real
-        combined_net_objs = self.net_data + self.net_group_object
-        combined_port_objs = self.port_data + self.port_group_object
-
-        for i in tqdm(combined_net_objs, desc="getting real IPs from named network objects", total=len(combined_net_objs), colour='red'):
-            for ip in ['source', 'destination']:
-                current_ruleset.loc[current_ruleset[ip].astype(str) == str(i[1]), f'real_{ip}'] = i[1] if not isinstance(i[1],list) else '|'.join(i[1])
-                ruleset.loc[ruleset[f'{ip}_network'].astype(str) == str(i[1]), f'real_{ip}'] = i[1] if not isinstance(i[1],list) else '|'.join(i[1])
-        for i in tqdm(combined_port_objs, desc="getting real ports-protocols from named port objects", total=len(combined_port_objs), colour='green'):
-            current_ruleset.loc[current_ruleset['port'] == i[0], 'real_port'] = i[1] if not isinstance(i[1],list) else '|'.join([pi[0] for pi in i[1]])
-            ruleset.loc[ruleset['port'] == i[0], 'real_port'] = i[1] if not isinstance(i[1],list) else '|'.join([pi[0] for pi in i[1]])
+        self.logfmc.logger.warning("getting real ports-protocols from named port objects")
+        current_ruleset['real_port'] = current_ruleset['port'].apply(lambda p: fdp_grouper(p,'port'))
+        ruleset['real_port'] = ruleset['port'].apply(lambda p: fdp_grouper(p,'port'))
 
         # remove nan values with any
         current_ruleset.fillna(value='any',inplace=True)
         ruleset.fillna(value='any',inplace=True)
         current_ruleset.replace({'None':'any'},inplace=True)
+
+        # make sure we are matching by list type and sorting correctly even if its a list object
+        for col in ruleset.columns:
+            ruleset[col] = ruleset[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple,list)) else x)
+        for col in current_ruleset.columns:
+            current_ruleset[col] = current_ruleset[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple,list)) else x)
+
         # remove rules that are dups
         idx_collector = []
         for i in tqdm(current_ruleset.index, desc='Comparing old ruleset objects to new ones', total=len(current_ruleset.index), colour='yellow'):
@@ -432,7 +435,7 @@ class AugmentedWorker:
         idx_collector = list(set(idx_collector))
         try:
             ruleset.drop(idx_collector, inplace=True)
-            ruleset.reset_index(inplace=True)
+            ruleset.reset_index(inplace=True,drop=True)
             self.logfmc.logger.warning(f"{'#' * 3}DROP {len(idx_collector)} DUP RULES{'#' * 3}")
         except:
             # no dups to drop
@@ -522,6 +525,8 @@ class AugmentedWorker:
 
         # if we removed all the dups and we have no new rules or for some reason we dont have rules to deploy raise to stop the program
         try:
+            for col in ruleset.columns:
+                ruleset[col] = ruleset[col].apply(lambda x: tuple(v for v in x) if isinstance(x, list) else x)
             ruleset.drop_duplicates(ignore_index=True, inplace=True)
             if ruleset.empty:
                 raise Exception('NO RULES TO DEPLOY')
@@ -532,16 +537,10 @@ class AugmentedWorker:
         case1 = ruleset.groupby(['source_network', 'port'])
         case2 = ruleset.groupby(['destination_network', 'port'])
         case3 = ruleset.groupby(['destination_zone','source_zone','port'])
-        # this case will group ports together SINCE this is a port based script 1 rule = 1 port
-        # PLUS I was getting dups due the case3 and case4 not de-duping!! 
-        case4 = ruleset.groupby(['destination_network', 'source_network'])
 
         ruleset_holder = []
         dup_holder = []
-        for grouped_df, type_net in zip([case1, case2, case3, case4], ['source', 'destination','zone','port']):
-            # todo: find a better way to implment port grouping if at all!
-            if grouped_df == case4:
-                continue
+        for grouped_df, type_net in zip([case1, case2, case3], ['source', 'destination','zone']):
             group_listing = grouped_df.size()[grouped_df.size() > 1].index.values.tolist()
             for gl in group_listing:
                 concat_cols_type = 'destination' if type_net == 'source' else 'source'
@@ -583,14 +582,6 @@ class AugmentedWorker:
                     # dont take list items if the list only has 1 element
                     group['source_network'] = agg_src_net if len(agg_src_net) > 1 else agg_src_net[0]
                     group['destination_network'] = agg_dst_net if len(agg_dst_net) > 1 else agg_dst_net[0]
-                else:
-                    cct_port = 'port'
-                    cct_port_data = list(set(group[cct_port].to_list()))
-                    group = group.iloc[0]
-                    if len(cct_port_data) == 1:
-                        group[cct_port] = cct_port_data[0]
-                    else:
-                        group[cct_port] = sorted(cct_port_data)
                 # dup policy check
                 dup_seen = False
                 for rule_group in ruleset_holder:
@@ -603,9 +594,42 @@ class AugmentedWorker:
         ruleset.drop(ruleset.index[dup_holder], inplace=True)
         ruleset = pd.concat([pd.DataFrame(ruleset_holder), ruleset], ignore_index=True)
         ruleset.reset_index(inplace=True, drop=True)
+
+        # convert to tup for search
+        for col in ruleset.columns:
+            ruleset[col] = ruleset[col].apply(lambda x: tuple(v for v in x) if isinstance(x, list) else x)
+
+        # group ports separately
+        ruleset_holder = []
+        dup_holder = []
+        case4 = ruleset.groupby(['destination_network', 'source_network'])
+        c4_listing = case4.size()[case4.size() > 1].index.values.tolist()
+        for gl in c4_listing:
+            group = case4.get_group(gl)
+            # get idx dups of the main ruleset to remove
+            dup_holder += group.index.to_list()
+            cct_port_data = list(set(group['port'].to_list()))
+            group = group.iloc[0]
+            if len(cct_port_data) == 1:
+                group['port'] = cct_port_data[0]
+            else:
+                group['port'] = sorted(cct_port_data)
+                # dup policy check
+            dup_seen = False
+            for rule_group in ruleset_holder:
+                if group.to_dict() == rule_group:
+                    dup_seen = True
+                    break
+            if not dup_seen:
+                ruleset_holder.append(group.to_dict())
+        ruleset.drop(ruleset.index[dup_holder], inplace=True)
+        ruleset = pd.concat([pd.DataFrame(ruleset_holder), ruleset], ignore_index=True)
+        ruleset.reset_index(inplace=True, drop=True)
+
         # remove tuples from multi-zoned rows
-        for z_name in ['source','destination']:
-            ruleset[f'{z_name}_zone'] = ruleset[f'{z_name}_zone'].apply(lambda x: [v for v in x ] if isinstance(x,tuple) else x)
+        for col in ruleset.columns:
+            ruleset[col] = ruleset[col].apply(lambda x: list(v for v in x) if isinstance(x, tuple) else x)
+
         # since we grouped policy find the dups again and get rid of em
         ruleset = self.find_dup_policies(ruleset, acp_set)
         if ruleset.empty:
@@ -650,11 +674,11 @@ class AugmentedWorker:
                         sleep(5)
                         # get new port/net info per iteration so we dont create dup objects that have the same child IDs on creation if needed
                         self.fmc_net_port_info()
-                        # the inner break controls the for-loop and need a mechism to break IF we matched on already created group
+                        # the inner break controls the for-loop and need a mechanism to break IF we matched on already created group
                         matched = False
                         while not matched:
                             if 'destination' in k or 'source' in k:
-                                # if this object exist already use it
+                                # if this object exists already use it
                                 for ip_lists in self.net_group_object:
                                     if sorted(ip_lists[1]) == sorted(v):
                                         v = ip_lists[0]
@@ -676,7 +700,8 @@ class AugmentedWorker:
                             elif 'port' in k:
                                 # if this object exist already use it
                                 for port_lists in self.port_group_object:
-                                    if sorted(port_lists[1]) == sorted(v):
+                                    port_list_name = [p_name[0] for p_name in port_lists[1]]
+                                    if sorted(port_list_name) == sorted(v):
                                         v = port_lists[0]
                                         matched = True
                                         break
@@ -697,7 +722,7 @@ class AugmentedWorker:
             rule_form['name'] = f"{self.rule_prepend_name}_{rule['comment']}_{randint(1, 1000000)}"
 
             for srcdest_net in ['source','destination']:
-                if any(['any' != rule[f'{srcdest_net}_network'],'any' not in rule[f'{srcdest_net}_network']]):
+                if 'any' != rule[f'{srcdest_net}_network']:
                     if 'group' in rule[f'{srcdest_net}_network']:
                         # update npi if we created a grouped policy
                         self.fmc_net_port_info()
@@ -715,7 +740,7 @@ class AugmentedWorker:
                     else:
                         rule_form[f'{srcdest_z}Zones'] = {'objects': [all_zones[rule[f'{srcdest_z}_zone']]]}
 
-            if any(['any' != rule['port'], 'any' not in rule['port']]):
+            if 'any' != rule['port']:
                 if 'group' in rule['port']:
                     # update npi if we created a grouped policy
                     self.fmc_net_port_info()
@@ -777,7 +802,7 @@ class AugmentedWorker:
         return cdict
 
 if __name__ == "__main__":
-    augWork = AugmentedWorker(ppsm_location='gfrs.csv',access_policy='test11',ftd_host='10.11.6.191',fmc_host='10.11.6.60',rule_prepend_name='test_st_beta_1',zone_of_last_resort='outside_zone',same_cred=False,cred_file='cF.json')
+    augWork = AugmentedWorker(ppsm_location='gfrs.csv',access_policy='test12',ftd_host='10.11.6.191',fmc_host='10.11.6.60',rule_prepend_name='test_st_beta_1',zone_of_last_resort='outside_zone',same_cred=False,cred_file='cF.json')
     augWork.driver()
     # augWork.rest_connection()
     # augWork.fmc_net_port_info()
