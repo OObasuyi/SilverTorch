@@ -261,6 +261,7 @@ class AugmentedWorker:
 
     def find_nested_group_objects(self, object_item):
         try:
+            object_item = object_item.get('objects')
             if not isinstance(object_item, list):
                 return object_item
             item_holder = []
@@ -325,11 +326,11 @@ class AugmentedWorker:
         changed_ruleset = []
         for i in current_ruleset:
             subset_rule = {}
-            subset_rule['src_z'] = self.find_nested_group_objects(i.get('sourceZones').get('objects'))
-            subset_rule['dst_z'] = self.find_nested_group_objects(i.get('destinationZones').get('objects'))
-            subset_rule['source'] = self.find_nested_group_objects(i.get('sourceNetworks').get('objects'))
-            subset_rule['destination'] = self.find_nested_group_objects(i.get('destinationNetworks').get('objects'))
-            subset_rule['port'] = self.find_nested_group_objects(i.get('destinationPorts').get('objects'))
+            subset_rule['src_z'] = self.find_nested_group_objects(i.get('sourceZones'))
+            subset_rule['dst_z'] = self.find_nested_group_objects(i.get('destinationZones'))
+            subset_rule['source'] = self.find_nested_group_objects(i.get('sourceNetworks'))
+            subset_rule['destination'] = self.find_nested_group_objects(i.get('destinationNetworks'))
+            subset_rule['port'] = self.find_nested_group_objects(i.get('destinationPorts'))
             changed_ruleset.append(subset_rule)
         current_ruleset = changed_ruleset
         current_ruleset = pd.DataFrame(current_ruleset)
