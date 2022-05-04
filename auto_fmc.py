@@ -524,7 +524,6 @@ class AugmentedWorker:
         case1 = ruleset.groupby(['source_network', 'port'])
         case2 = ruleset.groupby(['destination_network', 'port'])
         case3 = ruleset.groupby(['destination_zone','source_zone','port'])
-
         ruleset_holder = []
         dup_holder = []
         for grouped_df, type_net in zip([case1, case2, case3], ['source', 'destination','zone']):
