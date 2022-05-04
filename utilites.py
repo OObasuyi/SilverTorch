@@ -91,5 +91,14 @@ def deprecated(func):
     return wrapper
 
 
+def permission_check(deploy_msg:str):
+    if not isinstance(deploy_msg,str):
+        raise ValueError(f'deploy_msg value is not type str. you passed an {type(deploy_msg)} object')
 
+    warn_msg = f'{deploy_msg}.\nENTER c TO CONTINUE'
+    while True:
+        warning(warn_msg)
+        user_input = input()
+        if user_input.lower() == 'c':
+            break
 

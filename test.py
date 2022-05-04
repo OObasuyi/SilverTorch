@@ -68,6 +68,11 @@ def gen_fake_rule_set(amount_of_rules=300,upload=False):
 
 
 if __name__ == "__main__":
-    slacker = AugmentedWorker(creds = dict(fmc_username='api_admin',fmc_password='1qaz!QAZ'))
+    # slacker = AugmentedWorker(creds = dict(fmc_username='api_admin',fmc_password='1qaz!QAZ'))
+    fg = 'HTTP(TCP)'
+    import re
+    qqq = re.sub('[^0-9a-zA-Z]+', '_', fg)
+    qqq = [i.split()[0] for i in qqq.split('_') if i == 'TCP' or i == 'UDP'][0]
+    print()
     # slacker.rest_connection()
     # gen_fake_rule_set(25,upload=True)

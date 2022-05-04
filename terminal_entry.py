@@ -26,7 +26,7 @@ def terminal_entry():
     fm = AugmentedWorker(cred_file=args.cred_file, ppsm_location=args.ppsm_location ,access_policy=args.access_policy,
                          rule_prepend_name=args.rule_prepend_name,fmc_host=args.fmc_host,ftd_host=args.ftd_host,domain=args.domain,zbr_bypass=args.zbr_bypass,
                          zone_of_last_resort=args.zolr,same_cred=args.same_creds)
-    fm.driver()
+    fm.policy_manipulation_flow()
 
 
 if __name__ == "__main__":

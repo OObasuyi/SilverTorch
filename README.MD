@@ -28,14 +28,15 @@ fireREST\
 OObasuyi/paramiko (for FIPS compliance)
 # Quick start
 ### Calling function directly from *auto_fmc.py*
+
 ```python
 from auto_fmc import AugmentedWorker
 
 # cred file must be imported see example_cred.json
-augWork = AugmentedWorker(cred_file='cred_file.json', ppsm_location='pps_file.csv',access_policy='acp')
+augWork = AugmentedWorker(cred_file='cred_file.json', ppsm_location='pps_file.csv', access_policy='acp')
 
 # starts workflow
-augWork.driver()
+augWork.policy_manipulation_flow()
 ```
 ### Command line interface
 ```console

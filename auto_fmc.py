@@ -9,7 +9,7 @@ import pandas as pd
 from fireREST import FMC
 from netmiko import ConnectHandler
 from tqdm import tqdm
-from utilites import create_file_path,deprecated
+from utilites import create_file_path,deprecated,permission_check
 from time import sleep
 
 pd.options.display.max_columns = None
@@ -452,23 +452,57 @@ class AugmentedWorker:
         # if we dont know where this zone is coming it must be from external
         return {f"{type_}_zone": self.zone_of_last_resort, f'{type_}_network': self.ppsm[f'fmc_name_{type_}'][i]}
 
-    def del_fmc_objects(self,obj_tup,type_,obj_type):
-        try:
-            if type_ == 'network':
-                if obj_type == 'net':
-                    if '/' in obj_tup[1]:
-                        self.fmc.object.network.delete(obj_tup[2])
-                    else:
-                        self.fmc.object.host.delete(obj_tup[2])
-                elif obj_type == 'net_group':
-                    self.fmc.object.networkgroup.delete(obj_tup[-1])
-            elif type_ == 'port':
-                if obj_type == 'port':
-                    self.fmc.object.protocolportobject.delete(obj_tup[3])
-                elif obj_type == 'port_group':
-                    self.fmc.object.portobjectgroup.delete(obj_tup[-1])
-        except Exception as error:
-            self.logfmc.logger.error(f'Cannot delete {obj_tup} of {type_} \n received code: {error}')
+    def del_fmc_objects(self,type_,obj_type:str=None,where:str=None):
+        """PLEASE BE AS SPECIFIC AS POSSIBLE"""
+        # get the latest created objects
+        self.fmc_net_port_info()
+        if not isinstance(where, str):
+            raise ValueError(f'where value is not type str. you passed an {type(where)} object')
+        permission_check(f'Are you sure you want to del ***{where}*** {type_} objects?')
+        if type_ == 'network':
+            if obj_type == 'net':
+                del_list = [i[2] for i in self.net_data if where in i[0]] if where != 'all' else self.net_data
+                for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {obj_type} objects'):
+                    try:
+                        if '/' in obj_id[1]:
+                            self.fmc.object.network.delete(obj_id)
+                        else:
+                            self.fmc.object.host.delete(obj_id)
+                    except Exception as error:
+                        self.logfmc.logger.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
+            elif obj_type == 'net_group':
+                del_list = [i[2] for i in self.net_group_object if where in i[0]] if where != 'all' else self.net_group_object
+                for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {obj_type} objects'):
+                    try:
+                        self.fmc.object.networkgroup.delete(obj_id)
+                    except Exception as error:
+                        self.logfmc.logger.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
+        elif type_ == 'port':
+            if obj_type == 'port':
+                del_list = [i[3] for i in self.port_data if where in i[0]] if where != 'all' else self.port_data
+                for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {obj_type} objects'):
+                    try:
+                        self.fmc.object.protocolportobject.delete(obj_id)
+                    except Exception as error:
+                        self.logfmc.logger.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
+            elif obj_type == 'port_group':
+                del_list = [i[2] for i in self.port_group_object if where in i[0]] if where != 'all' else self.port_group_object
+                for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {obj_type} objects'):
+                    try:
+                        self.fmc.object.portobjectgroup.delete(obj_id)
+                    except Exception as error:
+                        self.logfmc.logger.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
+        elif type_ == 'rule':
+            acp_id = self.fmc.policy.accesspolicy.get(name=self.access_policy)
+            acp_rules = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id['id'])
+            del_list = [i['name'] for i in acp_rules if where in i['name']] if where != 'all' else acp_rules
+            for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {where} rules'):
+                try:
+                    self.fmc.policy.accesspolicy.accessrule.delete(container_uuid=acp_id['id'],name=obj_id)
+                except Exception as error:
+                    self.logfmc.logger.error(f'Cannot delete {obj_id} from set {where} for rules \n received code: {error}')
+        else:
+            raise NotImplementedError(f'type_ not found please select rule, port, or network. you passed {type_}')
 
     def create_acp_rule(self):
         ruleset = []
@@ -627,12 +661,7 @@ class AugmentedWorker:
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
         ruleset_loc = create_file_path('predeploy_rules', f"fmc_ruleset_preload_configs_{dt_now}.csv", )
         ruleset.to_csv(ruleset_loc, index=False)
-        warn_msg = f'REVIEW PREDEPLOY RULESET FILE located at {ruleset_loc}. ENTER "c" TO CONTINUE'
-        while True:
-            self.logfmc.logger.warning(warn_msg)
-            user_input = input()
-            if user_input.lower() == 'c':
-                break
+        permission_check(f'REVIEW PRE-DEPLOY RULESET FILE located at {ruleset_loc}')
 
         temp_form = {"action": "ALLOW", "enabled": 'true', "type": "AccessRule",
             "name": "Rule2", "sendEventsToFMC": 'true', "enableSyslog": 'true',
@@ -744,7 +773,7 @@ class AugmentedWorker:
         except Exception as error:
             self.logfmc.logger.error(error)
 
-    def driver(self):
+    def policy_manipulation_flow(self):
         # login FMC
         self.rest_connection()
         # Get zone info first via ClI
@@ -787,24 +816,13 @@ class AugmentedWorker:
         cdict = {"fmc_username": fmc_u, "fmc_password": fmc_p, "ftd_username": ftd_u, "ftd_password": ftd_p}
         return cdict
 
+
 if __name__ == "__main__":
     augWork = AugmentedWorker(ppsm_location='gfrs.csv',access_policy='test12',ftd_host='10.11.6.191',fmc_host='10.11.6.60',rule_prepend_name='test_st_beta_1',zone_of_last_resort='outside_zone',same_cred=False,cred_file='cF.json')
-    augWork.driver()
-    # augWork.rest_connection()
-    # augWork.fmc_net_port_info()
-    # gps = augWork.net_data
-    # mms = augWork.net_group_object
-    # mmp = augWork.port_data
-    # pop = augWork.port_group_object
-    # for item in tqdm(mms,total=len(mms)):
-    #     augWork.del_fmc_objects(obj_tup=item, type_='network', obj_type='net_group')
-    # for item in tqdm(gps,total=len(gps)):
-    #     augWork.del_fmc_objects(obj_tup=item, type_='network', obj_type='net')
-    # for item in tqdm(pop,total=len(pop)):
-    #     augWork.del_fmc_objects(obj_tup=item, type_='port', obj_type='port_group')
-    # for item in tqdm(mmp,total=len(mmp)):
-    #     augWork.del_fmc_objects(obj_tup=item, type_='port', obj_type='port')
-    # augWork.driver()
+    # augWork.policy_manipulation_flow()
+    augWork.rest_connection()
+    augWork.del_fmc_objects(type_='rule',where='test_st_beta_1')
+
 
 
 
