@@ -2,7 +2,7 @@ from copy import deepcopy
 from datetime import datetime
 from ipaddress import IPv4Network, ip_network
 from random import randint
-from re import search
+from re import search, sub
 import json
 from logging_fmc import LogCollector
 import pandas as pd
@@ -118,7 +118,7 @@ class AugmentedWorker:
             ppsm[origin] = ppsm[origin].apply(lambda x: (x.split('/')[0]).strip() if '/32' in x else x.strip())
         # strip extra spaces in cols
         for col in ppsm.columns:
-            ppsm[col] = ppsm[col].apply(lamba x: x.strip())
+            ppsm[col] = ppsm[col].apply(lambda x: x.strip())
         # check if we have acceptable protocol for the API
         na_protos = ppsm[~ppsm['protocol'].str.contains('TCP|UDP',regex=True)]
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
@@ -129,20 +129,14 @@ class AugmentedWorker:
             sleep(2)
             na_protos.to_csv(fpath,index=False)
         ppsm = ppsm[ppsm['protocol'].str.contains('TCP|UDP',regex=True)]
+        # remove non-alphanumeric chars from str if protocol take udp or tcp from str
+        for col in ['service','protocol']:
+            ppsm[col] = ppsm[col].apply(lambda x: sub('[^0-9a-zA-Z]+', '_', x))
+            if col == 'protocol':
+                ppsm[col] = ppsm[col].apply(lambda x: [i.split()[0] for i in x.split('_') if i == 'TCP' or i == 'UDP'][0])
         return ppsm
 
     def create_fmc_object_names(self, keep_old_name=True):
-        def new_name():
-            if type_ in ['source', 'destination']:
-                net = self.ppsm[type_][x]
-                if '/' in net:
-                    return f'{net.split("/")[0]}_{net.split("/")[1]}'
-                else:
-                    return net
-            else:
-                # if the service is not type-of-port format; make it so
-                return (self.ppsm['service'][x]).replace(" ","-")
-
         # drop trailing decimal point from str conversion
         self.ppsm['port_1'] = self.ppsm['port_1'].apply(lambda x: x.split('.')[0])
         self.ppsm['port_2'] = self.ppsm['port_2'].apply(lambda x: x.split('.')[0])
@@ -169,7 +163,7 @@ class AugmentedWorker:
         self.ppsm['protocol'] = self.ppsm['protocol'].astype(str).apply(lambda x: x.strip()[:3])
         self.ppsm.drop(columns=['port_1', 'port_2'], inplace=True)
 
-        for type_ in ['source', 'destination', 'port']:
+        for type_ in tqdm(['source', 'destination', 'port'], desc=f'creating new objects or checking if it exist.', total=3, colour='MAGENTA'):
             # whether we need to create an obj placeholder
             self.ppsm[f'fmc_name_{type_}_install'] = True
             self.ppsm[f'fmc_name_{type_}'] = 'None'
@@ -187,66 +181,51 @@ class AugmentedWorker:
                         self.ppsm[f'fmc_name_{type_}'].loc[(self.ppsm[type_] == port_info[2]) & (self.ppsm['protocol'] == port_info[1])] = port_info[0]
                         self.ppsm[f'fmc_name_{type_}_install'].loc[(self.ppsm[type_] == port_info[2]) & (self.ppsm['protocol'] == port_info[1])] = False
 
-            # fix the object naming if we are creating a new name so FMC will accept it and create obj
-            for x in tqdm(self.ppsm.index, desc=f'creating new {type_} object or checking if it exist.', total=len(self.ppsm.index), colour='MAGENTA'):
-                old_fire_name = self.ppsm[f'fmc_name_{type_}'][x]
-                if old_fire_name == 'None':
-                    # net object is any ip obj
-                    if self.ppsm[type_][x].lower() == 'any':
-                        # DNC = Do not create object for this entry
-                        self.ppsm[f'fmc_name_{type_}'].loc[x] = 'DNC'
-                if self.ppsm[f'fmc_name_{type_}'][x] == 'DNC':
-                    continue
-                elif not self.ppsm[f'fmc_name_{type_}_install'][x]:
-                    continue
-                else:
-                    fix_obj_naming = new_name()
-                    self.ppsm[f'fmc_name_{type_}'].loc[x] = fix_obj_naming
+            # group the common IPs and ports into unique and push all objects in bulk
+            install_pd = self.ppsm[self.ppsm[f'fmc_name_{type_}_install'] == True]
+            install_pd = install_pd[install_pd[type_] != 'any']
+            if type_ in ['source','destination']:
+                self.fmc_net_port_info()
+                install_pd[f'fmc_name_{type_}'] = install_pd[type_].apply(lambda net: f'{net.split("/")[0]}_{net.split("/")[1]}' if '/' in net else net)
+                if not self.ppsm[type_][(self.ppsm[f'fmc_name_{type_}_install'] == True) & (self.ppsm[type_] != 'any')].empty:
+                    self.ppsm[f'fmc_name_{type_}'] = self.ppsm[type_][(self.ppsm[f'fmc_name_{type_}_install'] == True) & (self.ppsm[type_] != 'any')].apply(lambda net: f'{net.split("/")[0]}_{net.split("/")[1]}' if '/' in net else net)
+                net_data = [nd[0] for nd in self.net_data]
+                net_list = list(set([net for net in install_pd[f'fmc_name_{type_}'] if '_' in net]))
+                net_list = [{'name': net, 'value': net.replace('_','/')} for net in net_list if net not in net_data]
 
-                    if type_ != 'port':
-                        new_obj = {'name': fix_obj_naming, 'value': self.ppsm[type_][x]}
-                        counter = 0
-                        while True:
-                            try:
-                                if '/' in self.ppsm[type_][x]:
-                                    response = self.fmc.object.network.create(data=new_obj)
-                                else:
-                                    response = self.fmc.object.host.create(data=new_obj)
-                                self._creation_check(response, new_obj, output=False)
-                                break
-                            except Exception as error:
-                                self.logfmc.logger.error(f'{error} related to {self.ppsm[type_][x]}')
-                                # if we run into issues where this somehow already exist then append a num to end of it
-                                counter += 1
-                                if 'already exists' in str(error):
-                                    self.logfmc.logger.info(error)
-                                    if not keep_old_name:
-                                        new_obj['name'] = f'{fix_obj_naming}_{counter}'
-                                        self.ppsm[f'fmc_name_{type_}'].loc[x] = f'{fix_obj_naming}_{counter}'
-                                        self.logfmc.logger.warning(f'creating new object: {new_obj["name"]} and trying again.. ')
-                                        return
-                                    else:
-                                        break
+                host_list = list(set([host for host in install_pd[f'fmc_name_{type_}'] if not '_' in host]))
+                host_list = [{'name': host, 'value': host} for host in host_list if host not in net_data]
+                try:
+                    self.fmc.object.network.create(data=net_list)
+                except Exception as error:
+                    self.logfmc.logger.debug(error)
 
-                    else:
-                        new_obj = {'name': fix_obj_naming, "protocol": self.ppsm['protocol'][x], 'port': self.ppsm[type_][x]}
-                        counter = 0
-                        while True:
-                            try:
-                                response = self.fmc.object.protocolportobject.create(data=new_obj)
-                                self._creation_check(response, new_obj, output=False)
-                                break
-                            except Exception as error:
-                                counter += 1
-                                if 'already exists' in str(error):
-                                    self.logfmc.logger.info(error)
-                                    if not keep_old_name:
-                                        new_obj['name'] = f'{fix_obj_naming}_{counter}'
-                                        self.ppsm[f'fmc_name_{type_}'].loc[x] = f'{fix_obj_naming}_{counter}'
-                                        self.logfmc.logger.warning(f'creating new object: {new_obj["name"]} and trying again.. ')
-                                        return
-                                    else:
-                                        break
+                try:
+                    self.fmc.object.host.create(data=host_list)
+                except Exception as error:
+                    self.logfmc.logger.debug(error)
+            else:
+                if not install_pd.empty:
+                    group_port = install_pd.groupby(['port','protocol'])
+                    gpl = group_port.size()[group_port.size() > 0].index.values.tolist()
+                    for i in gpl:
+                        i = group_port.get_group(i)
+                        i = i.iloc[0]
+                        ipd = install_pd['service'][(install_pd['port'] == i['port']) & (install_pd['protocol'] == i['protocol'])]
+                        spipd = self.ppsm['service'][(self.ppsm['port'] == i['port']) & (self.ppsm['protocol'] == i['protocol'])]
+                        install_pd[f'fmc_name_{type_}'][ipd.index.tolist()] = ipd.iloc[0]
+                        self.ppsm[f'fmc_name_{type_}'][spipd.index.tolist()] = spipd.iloc[0]
+
+                    port_data = [po[0] for po in self.port_data]
+                    install_pd[f'fmc_name_{type_}'] = install_pd[f'fmc_name_{type_}'].apply(lambda port: port.replace(" ","-"))
+                    self.ppsm[f'fmc_name_{type_}'] = self.ppsm[f'fmc_name_{type_}'].apply(lambda port: port.replace(" ","-"))
+
+                    port_list = list(set([port for port in install_pd[f'fmc_name_{type_}'] if port not in port_data]))
+                    port_list = [{'name': port, "protocol": install_pd['protocol'][install_pd[f'fmc_name_{type_}'] == port].iloc[0], 'port': install_pd['port'][install_pd[f'fmc_name_{type_}'] == port].iloc[0]} for port in port_list]
+                    try:
+                        self.fmc.object.protocolportobject.create(data=port_list)
+                    except Exception as error:
+                        self.logfmc.logger.debug(error)
 
     def zone_to_ip_information(self):
         route_zone_info = []
@@ -281,36 +260,36 @@ class AugmentedWorker:
         return route_zone_info
 
     def find_nested_group_objects(self, object_item):
-        if not isinstance(object_item, list):
-            return object_item
-
-        item_holder = []
-        for obj_info in object_item:
-            if 'group' not in obj_info.get('type').lower():
-                item_holder.append(obj_info.get('name'))
-
-            elif 'group' in obj_info.get('type').lower():
-                if 'port' not in obj_info.get('type').lower():
-                    for i in self.net_group_object:
-                        if i[0] == obj_info['name']:
-                            for v in i[1]:
-                                try:
-                                    item_holder.append(v.get('name'))
-                                except:
-                                    item_holder.append(v)
-                else:
-                    for i in self.port_group_object:
-                        if obj_info.get('name') == i[0]:
-                            for v in i[1]:
-                                try:
-                                    item_holder.append(v.get('name'))
-                                except:
-                                    item_holder.append(v)
-
-        if len(item_holder) == 1:
-            return item_holder[0]
-        sorted(item_holder)
-        return item_holder
+        try:
+            object_item = object_item.get('objects')
+            if not isinstance(object_item, list):
+                return object_item
+            item_holder = []
+            for obj_info in object_item:
+                if 'group' not in obj_info.get('type').lower():
+                    item_holder.append(obj_info.get('name'))
+                elif 'group' in obj_info.get('type').lower():
+                    if 'port' not in obj_info.get('type').lower():
+                        for i in self.net_group_object:
+                            if i[0] == obj_info['name']:
+                                for v in i[1]:
+                                    for ip in self.net_data:
+                                        if v == ip[0]:
+                                            item_holder.append(ip[0])
+                    else:
+                        for i in self.port_group_object:
+                            if obj_info.get('name') == i[0]:
+                                for v in i[1]:
+                                    for ports in self.port_data:
+                                        if v[0] == ports[0]:
+                                            item_holder.append(ports[0])
+            if len(item_holder) == 1:
+                return item_holder[0]
+            sorted(item_holder)
+            return item_holder
+        except Exception as error:
+            self.logfmc.logger.debug(error)
+            return None
 
     def find_dup_policies(self, ruleset, acp_set):
         def flatten(d):
@@ -326,31 +305,32 @@ class AugmentedWorker:
                     out[key] = val
             return out
 
+        def fdp_grouper(p,type_):
+            if type_ == 'ip':
+                if not isinstance(p, list):
+                    for ipx in self.net_data:
+                        if p == ipx[0]:
+                            return ipx[1]
+                else:
+                    return sorted(list(set(ipx[1] for ruleip in p for ipx in self.net_data if ruleip == ipx[0])))
+            if type_ == 'port':
+                if not isinstance(p, list):
+                    for px in self.port_data:
+                        if p == px[0]:
+                            return f"{px[1]}:{px[2]}"
+                else:
+                    return sorted(list(set(f"{px[1]}:{px[2]}" for rulep in p for px in self.port_data if rulep == px[0])))
+
         # find existing policy in fmc
         current_ruleset = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_set['id'])
         changed_ruleset = []
         for i in current_ruleset:
             subset_rule = {}
-            try:
-                subset_rule['src_z'] = self.find_nested_group_objects(i.get('sourceZones').get('objects'))
-            except:
-                subset_rule['src_z'] = None
-            try:
-                subset_rule['dst_z'] = self.find_nested_group_objects(i.get('destinationZones').get('objects'))
-            except:
-                subset_rule['dst_z'] = None
-            try:
-                subset_rule['source'] = self.find_nested_group_objects(i.get('sourceNetworks').get('objects'))
-            except:
-                subset_rule['source'] = None
-            try:
-                subset_rule['destination'] = self.find_nested_group_objects(i.get('destinationNetworks').get('objects'))
-            except:
-                subset_rule['destination'] = None
-            try:
-                subset_rule['port'] = self.find_nested_group_objects(i.get('destinationPorts').get('objects'))
-            except:
-                subset_rule['port'] = None
+            subset_rule['src_z'] = self.find_nested_group_objects(i.get('sourceZones'))
+            subset_rule['dst_z'] = self.find_nested_group_objects(i.get('destinationZones'))
+            subset_rule['source'] = self.find_nested_group_objects(i.get('sourceNetworks'))
+            subset_rule['destination'] = self.find_nested_group_objects(i.get('destinationNetworks'))
+            subset_rule['port'] = self.find_nested_group_objects(i.get('destinationPorts'))
             changed_ruleset.append(subset_rule)
         current_ruleset = changed_ruleset
         current_ruleset = pd.DataFrame(current_ruleset)
@@ -358,36 +338,26 @@ class AugmentedWorker:
             self.logfmc.logger.error('nothing in current ruleset')
             return ruleset
 
-        # get group objects directly added to current rule
-        for ip in ['source', 'destination', 'port']:
-            grouped_idx = current_ruleset[current_ruleset[ip].apply(lambda x: True if isinstance(x, list) else False)].index.to_list()
-            if len(grouped_idx) > 0:
-                for gidx in grouped_idx:
-                    real_grouped_ip = []
-                    for cri in current_ruleset[ip][gidx]:
-                        dat_list = self.net_data if ip != 'port' else self.port_data
-                        for snd in dat_list:
-                            if cri == snd[0]:
-                                real_dat = snd[1] if ip != 'port' else f'{snd[1]}:{snd[2]}'
-                                real_grouped_ip.append(real_dat)
-                    current_ruleset.loc[current_ruleset[ip].index == gidx, f'real_{ip}'] = '|'.join(real_grouped_ip)
+        self.logfmc.logger.warning("getting real IPs from named network objects")
+        for ip in ['source', 'destination']:
+            current_ruleset[f'real_{ip}'] = current_ruleset[ip].apply(lambda p: fdp_grouper(p, 'ip'))
+            ruleset[f'real_{ip}'] = ruleset[f'{ip}_network'].apply(lambda p: fdp_grouper(p, 'ip'))
 
-        # transformed named objs to real
-        combined_net_objs = self.net_data + self.net_group_object
-        combined_port_objs = self.port_data + self.port_group_object
-
-        for i in tqdm(combined_net_objs, desc="getting real IPs from named network objects", total=len(combined_net_objs), colour='red'):
-            for ip in ['source', 'destination']:
-                current_ruleset.loc[current_ruleset[ip].astype(str) == str(i[1]), f'real_{ip}'] = i[1] if not isinstance(i[1],list) else '|'.join(i[1])
-                ruleset.loc[ruleset[f'{ip}_network'].astype(str) == str(i[1]), f'real_{ip}'] = i[1] if not isinstance(i[1],list) else '|'.join(i[1])
-        for i in tqdm(combined_port_objs, desc="getting real ports-protocols from named port objects", total=len(combined_port_objs), colour='green'):
-            current_ruleset.loc[current_ruleset['port'] == i[0], 'real_port'] = i[1] if not isinstance(i[1],list) else '|'.join([pi[0] for pi in i[1]])
-            ruleset.loc[ruleset['port'] == i[0], 'real_port'] = i[1] if not isinstance(i[1],list) else '|'.join([pi[0] for pi in i[1]])
+        self.logfmc.logger.warning("getting real ports-protocols from named port objects")
+        current_ruleset['real_port'] = current_ruleset['port'].apply(lambda p: fdp_grouper(p,'port'))
+        ruleset['real_port'] = ruleset['port'].apply(lambda p: fdp_grouper(p,'port'))
 
         # remove nan values with any
         current_ruleset.fillna(value='any',inplace=True)
         ruleset.fillna(value='any',inplace=True)
         current_ruleset.replace({'None':'any'},inplace=True)
+
+        # make sure we are matching by list type and sorting correctly even if its a list object
+        for col in ruleset.columns:
+            ruleset[col] = ruleset[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple,list)) else x)
+        for col in current_ruleset.columns:
+            current_ruleset[col] = current_ruleset[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple,list)) else x)
+
         # remove rules that are dups
         idx_collector = []
         for i in tqdm(current_ruleset.index, desc='Comparing old ruleset objects to new ones', total=len(current_ruleset.index), colour='yellow'):
@@ -452,7 +422,7 @@ class AugmentedWorker:
         idx_collector = list(set(idx_collector))
         try:
             ruleset.drop(idx_collector, inplace=True)
-            ruleset.reset_index(inplace=True)
+            ruleset.reset_index(inplace=True,drop=True)
             self.logfmc.logger.warning(f"{'#' * 3}DROP {len(idx_collector)} DUP RULES{'#' * 3}")
         except:
             # no dups to drop
@@ -482,23 +452,23 @@ class AugmentedWorker:
         # if we dont know where this zone is coming it must be from external
         return {f"{type_}_zone": self.zone_of_last_resort, f'{type_}_network': self.ppsm[f'fmc_name_{type_}'][i]}
 
-    def del_fmc_objects(self,obj_id,type_,obj_type):
+    def del_fmc_objects(self,obj_tup,type_,obj_type):
         try:
             if type_ == 'network':
                 if obj_type == 'net':
-                    try:
-                        self.fmc.object.host.delete(obj_id)
-                    except:
-                        self.fmc.object.network.delete(obj_id)
+                    if '/' in obj_tup[1]:
+                        self.fmc.object.network.delete(obj_tup[2])
+                    else:
+                        self.fmc.object.host.delete(obj_tup[2])
                 elif obj_type == 'net_group':
-                    self.fmc.object.networkgroup.delete(obj_id)
+                    self.fmc.object.networkgroup.delete(obj_tup[-1])
             elif type_ == 'port':
                 if obj_type == 'port':
-                    self.fmc.object.port.delete(obj_id)
+                    self.fmc.object.protocolportobject.delete(obj_tup[3])
                 elif obj_type == 'port_group':
-                    self.fmc.object.portobjectgroup.delete(obj_id)
+                    self.fmc.object.portobjectgroup.delete(obj_tup[-1])
         except Exception as error:
-            self.logfmc.logger.error(f'Cannot delete {obj_id} of {type_} \n received code: {error}')
+            self.logfmc.logger.error(f'Cannot delete {obj_tup} of {type_} \n received code: {error}')
 
     def create_acp_rule(self):
         ruleset = []
@@ -542,6 +512,8 @@ class AugmentedWorker:
 
         # if we removed all the dups and we have no new rules or for some reason we dont have rules to deploy raise to stop the program
         try:
+            for col in ruleset.columns:
+                ruleset[col] = ruleset[col].apply(lambda x: tuple(v for v in x) if isinstance(x, list) else x)
             ruleset.drop_duplicates(ignore_index=True, inplace=True)
             if ruleset.empty:
                 raise Exception('NO RULES TO DEPLOY')
@@ -552,16 +524,9 @@ class AugmentedWorker:
         case1 = ruleset.groupby(['source_network', 'port'])
         case2 = ruleset.groupby(['destination_network', 'port'])
         case3 = ruleset.groupby(['destination_zone','source_zone','port'])
-        # this case will group ports together SINCE this is a port based script 1 rule = 1 port
-        # PLUS I was getting dups due the case3 and case4 not de-duping!! 
-        # case4 = ruleset.groupby(['destination_network', 'source_network'])
-
         ruleset_holder = []
         dup_holder = []
-        for grouped_df, type_net in zip([case1, case2, case3, case4], ['source', 'destination','zone','port']):
-            # todo: find a better way to implment port grouping if at all!
-            if grouped_df == case4:
-                continue
+        for grouped_df, type_net in zip([case1, case2, case3], ['source', 'destination','zone']):
             group_listing = grouped_df.size()[grouped_df.size() > 1].index.values.tolist()
             for gl in group_listing:
                 concat_cols_type = 'destination' if type_net == 'source' else 'source'
@@ -603,23 +568,54 @@ class AugmentedWorker:
                     # dont take list items if the list only has 1 element
                     group['source_network'] = agg_src_net if len(agg_src_net) > 1 else agg_src_net[0]
                     group['destination_network'] = agg_dst_net if len(agg_dst_net) > 1 else agg_dst_net[0]
-                else:
-                    cct_port = 'port'
-                    cct_port_data = list(set(group[cct_port].to_list()))
-                    group = group.iloc[0]
-                    if len(cct_port_data) == 1:
-                        group[cct_port] = cct_port_data[0]
-                    else:
-                        group[cct_port] = sorted(cct_port_data)
-
-                ruleset_holder.append(group.to_dict())
+                # dup policy check
+                dup_seen = False
+                for rule_group in ruleset_holder:
+                    if group.to_dict() == rule_group:
+                        dup_seen = True
+                        break
+                if not dup_seen:
+                    ruleset_holder.append(group.to_dict())
 
         ruleset.drop(ruleset.index[dup_holder], inplace=True)
         ruleset = pd.concat([pd.DataFrame(ruleset_holder), ruleset], ignore_index=True)
         ruleset.reset_index(inplace=True, drop=True)
+
+        # convert to tup for search
+        for col in ruleset.columns:
+            ruleset[col] = ruleset[col].apply(lambda x: tuple(v for v in x) if isinstance(x, list) else x)
+
+        # group ports separately
+        ruleset_holder = []
+        dup_holder = []
+        case4 = ruleset.groupby(['destination_network', 'source_network'])
+        c4_listing = case4.size()[case4.size() > 1].index.values.tolist()
+        for gl in c4_listing:
+            group = case4.get_group(gl)
+            # get idx dups of the main ruleset to remove
+            dup_holder += group.index.to_list()
+            cct_port_data = list(set(group['port'].to_list()))
+            group = group.iloc[0]
+            if len(cct_port_data) == 1:
+                group['port'] = cct_port_data[0]
+            else:
+                group['port'] = sorted(cct_port_data)
+                # dup policy check
+            dup_seen = False
+            for rule_group in ruleset_holder:
+                if group.to_dict() == rule_group:
+                    dup_seen = True
+                    break
+            if not dup_seen:
+                ruleset_holder.append(group.to_dict())
+        ruleset.drop(ruleset.index[dup_holder], inplace=True)
+        ruleset = pd.concat([pd.DataFrame(ruleset_holder), ruleset], ignore_index=True)
+        ruleset.reset_index(inplace=True, drop=True)
+
         # remove tuples from multi-zoned rows
-        for z_name in ['source','destination']:
-            ruleset[f'{z_name}_zone'] = ruleset[f'{z_name}_zone'].apply(lambda x: [v for v in x ] if isinstance(x,tuple) else x)
+        for col in ruleset.columns:
+            ruleset[col] = ruleset[col].apply(lambda x: list(v for v in x) if isinstance(x, tuple) else x)
+
         # since we grouped policy find the dups again and get rid of em
         ruleset = self.find_dup_policies(ruleset, acp_set)
         if ruleset.empty:
@@ -642,6 +638,8 @@ class AugmentedWorker:
             "name": "Rule2", "sendEventsToFMC": 'true', "enableSyslog": 'true',
             "logFiles": 'false', "logBegin": 'false', "logEnd": 'true'}
 
+        # get all zone info
+        all_zones = {fix_object(i)[0]['name']:fix_object(i)[0] for i in self.fmc.object.securityzone.get()}
         # create a bulk policy push operation
         charity_policy = []
         for i in tqdm(ruleset.index, desc='Loading bulk rule collection artifacts', total=len(ruleset.index), colour='green'):
@@ -654,111 +652,87 @@ class AugmentedWorker:
                         v = json.loads(v.replace("'", '"'))
                 if isinstance(v,list):
                     # dont need create objs for zones or any ips,zone
-                    if 'zone' in k or 'any' == v[0]:
-                        if 'any' == v[0]:
+                    if 'zone' in k or 'any' in v:
+                        if 'any' in v:
                             # any is coming as list so lets strip it just in case this is due to how the policy lookup occurred
-                            v = v[0]
+                            v = 'any'
                     else:
+                        sleep(5)
                         # get new port/net info per iteration so we dont create dup objects that have the same child IDs on creation if needed
                         self.fmc_net_port_info()
-                        # the inner break controls the for-loop and need a mechism to break IF we matched on already created group
+                        # the inner break controls the for-loop and need a mechanism to break IF we matched on already created group
                         matched = False
-                        while True:
-                            try:
-                                # if this object exist already use it
+                        while not matched:
+                            if 'destination' in k or 'source' in k:
+                                # if this object exists already use it
                                 for ip_lists in self.net_group_object:
                                     if sorted(ip_lists[1]) == sorted(v):
                                         v = ip_lists[0]
                                         matched = True
                                         break
-                                if matched:
-                                    break
-                                # create group net or port objs by IDs since fmc cant create rules with more than 50 objects
-                                create_group_obj = {'objects': [{'type': name_ip_id[1], 'id': name_ip_id[2]} for ip in v for name_ip_id in self.net_data if ip == name_ip_id[0]], 'name': f"{self.rule_prepend_name}_net_group_{randint(1, 100)}"}
-                                response = self.fmc.object.networkgroup.create(create_group_obj)
-                                if 'already exists' not in str(response):
-                                    self._creation_check(response, create_group_obj['name'], output=False)
-                            except:
+                                if not matched:
+                                    # create group net or port objs by IDs since fmc cant create rules with more than 50 objects
+                                    create_group_obj = {'objects': [{'type': name_ip_id[1], 'id': name_ip_id[2]} for ip in v for name_ip_id in self.net_data if ip == name_ip_id[0]], 'name': f"{self.rule_prepend_name}_net_group_{randint(1, 100)}"}
+                                    try:
+                                        if len(create_group_obj['objects']) > 1:
+                                            response = self.fmc.object.networkgroup.create(create_group_obj)
+                                            if 'already exists' not in str(response):
+                                                self._creation_check(response, create_group_obj['name'], output=False)
+                                        matched = True
+                                        v = create_group_obj['name']
+                                    except Exception as error:
+                                        self.logfmc.logger.error(error)
+
+                            elif 'port' in k:
                                 # if this object exist already use it
                                 for port_lists in self.port_group_object:
-                                    if sorted(port_lists[1]) == sorted(v):
+                                    port_list_name = [p_name[0] for p_name in port_lists[1]]
+                                    if sorted(port_list_name) == sorted(v):
                                         v = port_lists[0]
                                         matched = True
                                         break
-                                if matched:
-                                    break
-                                create_group_obj = {'objects': [{'type': name_port_id[4], 'id': name_port_id[3]} for port in v for name_port_id in self.port_data if port == name_port_id[0]], 'name': f"{self.rule_prepend_name}_port_group_{randint(1, 100)}"}
-                                response = self.fmc.object.portobjectgroup.create(create_group_obj)
-                                if 'already exists' not in str(response):
-                                    self._creation_check(response, create_group_obj['name'], output=False)
-
-                            v = create_group_obj['name']
-                            break
+                                if not matched:
+                                    create_group_obj = {'objects': [{'type': name_port_id[4], 'id': name_port_id[3]} for port in v for name_port_id in self.port_data if port == name_port_id[0]], 'name': f"{self.rule_prepend_name}_port_group_{randint(1, 100)}"}
+                                    try:
+                                        if len(create_group_obj['objects']) > 1:
+                                            response = self.fmc.object.portobjectgroup.create(create_group_obj)
+                                            if 'already exists' not in str(response):
+                                                self._creation_check(response, create_group_obj['name'], output=False)
+                                        matched = True
+                                        v = create_group_obj['name']
+                                    except Exception as error:
+                                        self.logfmc.logger.error(error)
                 dh[k] = v
             rule = dh
-
             rule_form = deepcopy(temp_form)
             rule_form['name'] = f"{self.rule_prepend_name}_{rule['comment']}_{randint(1, 1000000)}"
 
-            if any(['any' != rule['source_zone'],'any' not in rule['source_zone']]):
-                if isinstance(rule['source_zone'],list):
-                    add_to_object = []
-                    for i in rule['source_zone']:
-                        add_to_object.append(fix_object(self.fmc.object.securityzone.get(name=i))[0])
-                    rule_form['sourceZones'] = {'objects':add_to_object}
-                else:
-                    rule_form['sourceZones'] = {'objects': fix_object(self.fmc.object.securityzone.get(name=rule['source_zone']))}
+            for srcdest_net in ['source','destination']:
+                if 'any' != rule[f'{srcdest_net}_network']:
+                    if 'group' in rule[f'{srcdest_net}_network']:
+                        # update npi if we created a grouped policy
+                        self.fmc_net_port_info()
+                        rule_form[f'{srcdest_net}Networks'] = {'objects': fix_object(self.fmc.object.networkgroup.get(name=rule[f'{srcdest_net}_network']))}
+                    else:
+                        rule_form[f'{srcdest_net}Networks'] = {'objects': [{'name': i[0], 'id': i[2], 'type': 'Host' if '/' not in i[1] else 'Network'} for i in self.net_data if i[0] == rule[f'{srcdest_net}_network']]}
 
-            if any(['any' != rule['source_network'],'any' not in rule['source_network']]):
-                if isinstance(rule['source_network'],list):
-                    add_to_object = []
-                    for i in rule['source_network']:
-                        try:
-                            add_to_object.append(fix_object(self.fmc.object.network.get(name=i))[0])
-                        except:
-                            add_to_object.append(fix_object(self.fmc.object.host.get(name=i))[0])
-                    rule_form['sourceNetworks'] = {'objects':add_to_object}
-                else:
-                    try:
-                        rule_form['sourceNetworks'] = {'objects': fix_object(self.fmc.object.network.get(name=rule['source_network']))}
-                    except:
-                        try:
-                            rule_form['sourceNetworks'] = {'objects': fix_object(self.fmc.object.host.get(name=rule['source_network']))}
-                        except:
-                            rule_form['sourceNetworks'] = {'objects': fix_object(self.fmc.object.networkgroup.get(name=rule['source_network']))}
+            for srcdest_z in ['source', 'destination']:
+                if all(['any' != rule[f'{srcdest_z}_zone'],'any' not in rule[f'{srcdest_z}_zone']]):
+                    if isinstance(rule[f'{srcdest_z}_zone'],list):
+                        add_to_object = []
+                        for i in rule[f'{srcdest_z}_zone']:
+                            add_to_object.append(all_zones[i])
+                        rule_form[f'{srcdest_z}Zones'] = {'objects':add_to_object}
+                    else:
+                        rule_form[f'{srcdest_z}Zones'] = {'objects': [all_zones[rule[f'{srcdest_z}_zone']]]}
 
-            if any(['any' != rule['destination_network'],'any' not in rule['destination_network']]):
-                if isinstance(rule['destination_network'],list):
-                    add_to_object = []
-                    for i in rule['destination_network']:
-                        try:
-                            add_to_object.append(fix_object(self.fmc.object.network.get(name=i))[0])
-                        except:
-                            add_to_object.append(fix_object(self.fmc.object.host.get(name=i))[0])
-                    rule_form['destinationNetworks'] = {'objects':add_to_object}
-                else:
-                    try:
-                        rule_form['destinationNetworks'] = {'objects': fix_object(self.fmc.object.network.get(name=rule['destination_network']))}
-                    except:
-                        try:
-                            rule_form['destinationNetworks'] = {'objects': fix_object(self.fmc.object.host.get(name=rule['destination_network']))}
-                        except:
-                            rule_form['destinationNetworks'] = {'objects': fix_object(self.fmc.object.networkgroup.get(name=rule['destination_network']))}
-
-            if all(['any' != rule['destination_zone'],'any' not in rule['destination_zone']]):
-                if isinstance(rule['destination_zone'],list):
-                    add_to_object = []
-                    for i in rule['destination_zone']:
-                        add_to_object.append(fix_object(self.fmc.object.securityzone.get(name=i))[0])
-                    rule_form['destinationZones'] = {'objects':add_to_object}
-                else:
-                    rule_form['destinationZones'] = {'objects': fix_object(self.fmc.object.securityzone.get(name=rule['destination_zone']))}
-
-            if any(['any' != rule['port'], 'any' not in rule['port']]):
-                try:
-                    rule_form['destinationPorts'] = {'objects': fix_object(self.fmc.object.protocolportobject.get(name=rule['port']))}
-                except:
+            if 'any' != rule['port']:
+                if 'group' in rule['port']:
+                    # update npi if we created a grouped policy
+                    self.fmc_net_port_info()
                     rule_form['destinationPorts'] = {'objects': fix_object(self.fmc.object.portobjectgroup.get(name=rule['port']))}
+                else:
+                    rule_form['destinationPorts'] = {'objects': [{'name': i[0], 'id': i[3], 'type': i[4]} for i in self.port_data if i[0] == rule['port']]}
 
             rule_form['newComments'] = [rule['comment']]
             charity_policy.append(rule_form)
@@ -813,14 +787,24 @@ class AugmentedWorker:
         cdict = {"fmc_username": fmc_u, "fmc_password": fmc_p, "ftd_username": ftd_u, "ftd_password": ftd_p}
         return cdict
 
-
-
 if __name__ == "__main__":
-    augWork = AugmentedWorker(ppsm_location='gfrs.csv',access_policy='test09',ftd_host='10.11.6.191',fmc_host='10.11.6.60',rule_prepend_name='test_st_beta_1',zone_of_last_resort='outside_zone',same_cred=False)
+    augWork = AugmentedWorker(ppsm_location='gfrs.csv',access_policy='test12',ftd_host='10.11.6.191',fmc_host='10.11.6.60',rule_prepend_name='test_st_beta_1',zone_of_last_resort='outside_zone',same_cred=False,cred_file='cF.json')
     augWork.driver()
     # augWork.rest_connection()
     # augWork.fmc_net_port_info()
     # gps = augWork.net_data
+    # mms = augWork.net_group_object
+    # mmp = augWork.port_data
+    # pop = augWork.port_group_object
+    # for item in tqdm(mms,total=len(mms)):
+    #     augWork.del_fmc_objects(obj_tup=item, type_='network', obj_type='net_group')
     # for item in tqdm(gps,total=len(gps)):
-    #     augWork.del_fmc_objects(obj_id=item[-1],type_='network',obj_type='net')
+    #     augWork.del_fmc_objects(obj_tup=item, type_='network', obj_type='net')
+    # for item in tqdm(pop,total=len(pop)):
+    #     augWork.del_fmc_objects(obj_tup=item, type_='port', obj_type='port_group')
+    # for item in tqdm(mmp,total=len(mmp)):
+    #     augWork.del_fmc_objects(obj_tup=item, type_='port', obj_type='port')
+    # augWork.driver()
+
+
 
