@@ -110,5 +110,37 @@ def change_row_vals(f_name:str,replace_with:list,to_look_for,col,return_pd=False
         new_changes.to_csv(f'new_{f_name}',index=False)
 
 
+def permission_check(deploy_msg:str):
+    if not isinstance(deploy_msg,str):
+        raise ValueError(f'deploy_msg value is not type str. you passed an {type(deploy_msg)} object')
+
+    warn_msg = f'{deploy_msg}.\nENTER c TO CONTINUE'
+    while True:
+        warning(warn_msg)
+        user_input = input()
+        if user_input.lower() == 'c':
+            break
 
 
+def rename_ippp_instances(f_name:str,replace_with_list:list,to_look_for:str,col_to_process_list:list,return_pd=False):
+    """renames instances where the IPPP(ip port & protocol) sheet has an unwanted attribute. IE. rename all instances from a col where row == 'intranet-IPs' with '192.168.1.0/24' """
+    old_pd = pd.read_csv(f_name)
+    new_changes = old_pd.copy()
+    for col in col_to_process_list:
+        non_selected_cols = old_pd.drop(columns=[col])
+        for x in old_pd.index:
+            if old_pd[col][x] == to_look_for:
+                for replace_with in replace_with_list:
+                    nsc_pd = non_selected_cols.loc[x].to_dict()
+                    nsc_pd[col] = replace_with
+                    new_changes = new_changes.append(nsc_pd,ignore_index=True)
+        new_changes.drop_duplicates(inplace=True)
+        new_changes = new_changes[new_changes[col] != to_look_for]
+    if return_pd:
+        return new_changes
+    else:
+        new_changes.to_csv(f_name,index=False)
+
+
+if __name__ == "__main__":
+    rename_ippp_instances()

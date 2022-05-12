@@ -5,7 +5,7 @@ import pandas as pd
 import utilites
 
 
-def gen_half_way_ppsm():
+def gen_half_way_ippp():
     net_objects = slacker.fmc.object.network.get()
     net_info = [no['value'] for no in net_objects]
     keepers = []
@@ -55,7 +55,7 @@ def gen_fake_rule_set(amount_of_rules=300,upload=False):
             zone_dat = pickle.load(pkf)
 
     # slacker.zbr_bypass = zone_dat
-    # slacker.ppsm = gfrs_pd
+    # slacker.ippp = gfrs_pd
     # slacker.fmc_net_port_info()
     # slacker.create_fmc_object_names()
     # slacker.create_acp_rule()
@@ -68,6 +68,11 @@ def gen_fake_rule_set(amount_of_rules=300,upload=False):
 
 
 if __name__ == "__main__":
-    slacker = AugmentedWorker(creds = dict(fmc_username='api_admin',fmc_password='1qaz!QAZ'))
+    # slacker = AugmentedWorker(creds = dict(fmc_username='api_admin',fmc_password='1qaz!QAZ'))
+    fg = 'HTTP(TCP)'
+    import re
+    qqq = re.sub('[^0-9a-zA-Z]+', '_', fg)
+    qqq = [i.split()[0] for i in qqq.split('_') if i == 'TCP' or i == 'UDP'][0]
+    print()
     # slacker.rest_connection()
     # gen_fake_rule_set(25,upload=True)
