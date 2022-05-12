@@ -18,8 +18,6 @@ This script stages rules into the FMC. It also inserts rules based on their port
 1. if you new ip information and dont want to use the fastpath info to find the correct zone to put the IP, the zbr_bypass argument MUST match the row lines of the PPS rows
 2. any IP that doesn't have a fastpath match can have a zone assigned to it using the zone_of_last_resort argument
 
-## WIPS
- 1. better error and log handling
 ## Main Dependencies
 pandas \
 netmiko \
