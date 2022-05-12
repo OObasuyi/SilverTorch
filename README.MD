@@ -61,5 +61,5 @@ SilverTorch Optional Fields:
 ## CAT-FAQs
 1. **Q. Well how does this deal with rule deduplication????**  
 A. it scans the ACP and if a rule has the same Source and Destination Zone **AND** IPs and port  it will drop the potential rule from getting staged.  
-2. **Q. Thats fancy what about rules with nested objects???? hmmmm!**   
+2. **Q. Thats fancy what about rules with nested objects???? hmmmm!**    
 A. It also scans recrusively to find potential duplicate IP or port objects.  
