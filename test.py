@@ -5,7 +5,7 @@ import pandas as pd
 import utilites
 
 
-def gen_half_way_ppsm():
+def gen_half_way_ippp():
     net_objects = slacker.fmc.object.network.get()
     net_info = [no['value'] for no in net_objects]
     keepers = []
@@ -55,7 +55,7 @@ def gen_fake_rule_set(amount_of_rules=300,upload=False):
             zone_dat = pickle.load(pkf)
 
     # slacker.zbr_bypass = zone_dat
-    # slacker.ppsm = gfrs_pd
+    # slacker.ippp = gfrs_pd
     # slacker.fmc_net_port_info()
     # slacker.create_fmc_object_names()
     # slacker.create_acp_rule()

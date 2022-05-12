@@ -20,13 +20,13 @@ pd.options.mode.chained_assignment = None
 class AugmentedWorker:
 
     def __init__(self, cred_file: str = None, fmc_host='', ftd_host='', domain='Global',
-            ppsm_location='ppsm_test_file.csv', access_policy='test_acp', zbr_bypass: dict = None,rule_prepend_name='firewall',zone_of_last_resort='outside',same_cred=True):
+            ippp_location='ippp_test_file.csv', access_policy='test_acp', zbr_bypass: dict = None,rule_prepend_name='firewall',zone_of_last_resort='outside',same_cred=True):
         """
         @param cred_file: JSON file hosting user/pass information DEPRECATED
         @param fmc_host: FMC domain or IP address
         @param ftd_host: FTD domain or IP address
         @param domain: used to select the tenant in FMC
-        @param ppsm_location: location of rules to stage on FMC
+        @param ippp_location: location of rules to stage on FMC
         @param access_policy: which ACP to stage the rules onto
         @param zbr_bypass: (experimental) if you want to manually assign the security zone to rules instead of doing the zone to IP lookup make sure the zone and rules rows match exactly!
         @param rule_prepend_name: an additive on what to call the staged rule. ie a rule will look like facetime_rule_allow_facetime_5324
@@ -47,7 +47,7 @@ class AugmentedWorker:
         self.ftd_password = creds['ftd_password']
         self.domain = domain
         # this is just a check the file MUST be the folder
-        self.ppsm_location = create_file_path('ingestion',ppsm_location)
+        self.ippp_location = create_file_path('ingestion', ippp_location)
         self.access_policy = access_policy
         self.zbr_bypass = zbr_bypass
         self.rule_prepend_name = rule_prepend_name
@@ -107,20 +107,20 @@ class AugmentedWorker:
         except:
             return x.split('/')[0]
 
-    def retrieve_ppsm(self):
-        ppsm = pd.read_csv(self.ppsm_location)
-        ppsm = ppsm.astype(str)
-        ppsm = ppsm[ppsm['source'] != 'nan']
+    def retrieve_ippp(self):
+        ippp = pd.read_csv(self.ippp_location)
+        ippp = ippp.astype(str)
+        ippp = ippp[ippp['source'] != 'nan']
         for origin in ['source', 'destination']:
             # check if user entered a hot bits in thier subnet mask
-            ppsm[origin] = ppsm[origin].apply(lambda x: str(self._ip_address_check(x)))
+            ippp[origin] = ippp[origin].apply(lambda x: str(self._ip_address_check(x)))
             # fix so we dont have to refactor a bullion lines
-            ppsm[origin] = ppsm[origin].apply(lambda x: (x.split('/')[0]).strip() if '/32' in x else x.strip())
+            ippp[origin] = ippp[origin].apply(lambda x: (x.split('/')[0]).strip() if '/32' in x else x.strip())
         # strip extra spaces in cols
-        for col in ppsm.columns:
-            ppsm[col] = ppsm[col].apply(lambda x: x.strip())
+        for col in ippp.columns:
+            ippp[col] = ippp[col].apply(lambda x: x.strip())
         # check if we have acceptable protocol for the API
-        na_protos = ppsm[~ppsm['protocol'].str.contains('TCP|UDP',regex=True)]
+        na_protos = ippp[~ippp['protocol'].str.contains('TCP|UDP',regex=True)]
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
         fpath = create_file_path('CNI',f'non_applicable_protocols_{dt_now}.csv')
         if not na_protos.empty:
@@ -128,67 +128,67 @@ class AugmentedWorker:
             # make sure the user sees the msg with no input.
             sleep(2)
             na_protos.to_csv(fpath,index=False)
-        ppsm = ppsm[ppsm['protocol'].str.contains('TCP|UDP',regex=True)]
+        ippp = ippp[ippp['protocol'].str.contains('TCP|UDP',regex=True)]
         # remove non-alphanumeric chars from str if protocol take udp or tcp from str
         for col in ['service','protocol']:
-            ppsm[col] = ppsm[col].apply(lambda x: sub('[^0-9a-zA-Z]+', '_', x))
+            ippp[col] = ippp[col].apply(lambda x: sub('[^0-9a-zA-Z]+', '_', x))
             if col == 'protocol':
-                ppsm[col] = ppsm[col].apply(lambda x: [i.split()[0] for i in x.split('_') if i == 'TCP' or i == 'UDP'][0])
-        return ppsm
+                ippp[col] = ippp[col].apply(lambda x: [i.split()[0] for i in x.split('_') if i == 'TCP' or i == 'UDP'][0])
+        return ippp
 
     def create_fmc_object_names(self, keep_old_name=True):
         # drop trailing decimal point from str conversion
-        self.ppsm['port_1'] = self.ppsm['port_1'].apply(lambda x: x.split('.')[0])
-        self.ppsm['port_2'] = self.ppsm['port_2'].apply(lambda x: x.split('.')[0])
+        self.ippp['port_1'] = self.ippp['port_1'].apply(lambda x: x.split('.')[0])
+        self.ippp['port_2'] = self.ippp['port_2'].apply(lambda x: x.split('.')[0])
         # take care range ports
-        self.ppsm['port'] = 0
+        self.ippp['port'] = 0
 
-        for i in self.ppsm.index:
+        for i in self.ippp.index:
             # catch any any clause
-            if self.ppsm['port_1'][i] in ['nan', '0', '65535', 'any'] and self.ppsm['port_2'][i] in ['nan', '0', '65535', 'any']:
-                self.ppsm['port_2'][i] = self.ppsm['port_1'][i] = 'any'
-            elif self.ppsm['port_2'][i] in ['nan', '0', '65535', 'any'] and self.ppsm['port_1'][i] in ['nan', '0', '65535', 'any']:
-                self.ppsm['port_2'][i] = self.ppsm['port_1'][i] = self.ppsm['port_2'][i] = 'any'
+            if self.ippp['port_1'][i] in ['nan', '0', '65535', 'any'] and self.ippp['port_2'][i] in ['nan', '0', '65535', 'any']:
+                self.ippp['port_2'][i] = self.ippp['port_1'][i] = 'any'
+            elif self.ippp['port_2'][i] in ['nan', '0', '65535', 'any'] and self.ippp['port_1'][i] in ['nan', '0', '65535', 'any']:
+                self.ippp['port_2'][i] = self.ippp['port_1'][i] = self.ippp['port_2'][i] = 'any'
             # if the rows has nothing in the adjacent col copy from the other row. (this avoids nan bug)
-            if self.ppsm['port_2'][i] in ['nan']:
-                self.ppsm['port_2'][i] = self.ppsm['port_1'][i]
-            elif self.ppsm['port_1'][i] in ['nan']:
-                self.ppsm['port_1'][i] = self.ppsm['port_2'][i]
+            if self.ippp['port_2'][i] in ['nan']:
+                self.ippp['port_2'][i] = self.ippp['port_1'][i]
+            elif self.ippp['port_1'][i] in ['nan']:
+                self.ippp['port_1'][i] = self.ippp['port_2'][i]
             # if port is a range append range symbol
-            if self.ppsm['port_1'][i] != self.ppsm['port_2'][i]:
-                self.ppsm['port'].loc[i] = self.ppsm['port_1'][i] + '-' + self.ppsm['port_2'][i]
+            if self.ippp['port_1'][i] != self.ippp['port_2'][i]:
+                self.ippp['port'].loc[i] = self.ippp['port_1'][i] + '-' + self.ippp['port_2'][i]
             else:
-                self.ppsm['port'].loc[i] = self.ppsm['port_1'][i]
+                self.ippp['port'].loc[i] = self.ippp['port_1'][i]
         # take care of the random chars in protocol col ( we can only use TCP/UDP for its endpoint soo..
-        self.ppsm['protocol'] = self.ppsm['protocol'].astype(str).apply(lambda x: x.strip()[:3])
-        self.ppsm.drop(columns=['port_1', 'port_2'], inplace=True)
+        self.ippp['protocol'] = self.ippp['protocol'].astype(str).apply(lambda x: x.strip()[:3])
+        self.ippp.drop(columns=['port_1', 'port_2'], inplace=True)
 
         for type_ in tqdm(['source', 'destination', 'port'], desc=f'creating new objects or checking if it exist.', total=3, colour='MAGENTA'):
             # whether we need to create an obj placeholder
-            self.ppsm[f'fmc_name_{type_}_install'] = True
-            self.ppsm[f'fmc_name_{type_}'] = 'None'
+            self.ippp[f'fmc_name_{type_}_install'] = True
+            self.ippp[f'fmc_name_{type_}'] = 'None'
             if type_ != 'port':
                 for name_ip in self.net_data:
                     # if ip is found in FMC store that info in a df
-                    if not self.ppsm[self.ppsm[type_] == name_ip[1]].empty:
-                        self.ppsm[f'fmc_name_{type_}'].loc[self.ppsm[type_] == name_ip[1]] = name_ip[0]
-                        self.ppsm[f'fmc_name_{type_}_install'].loc[self.ppsm[type_] == name_ip[1]] = False
+                    if not self.ippp[self.ippp[type_] == name_ip[1]].empty:
+                        self.ippp[f'fmc_name_{type_}'].loc[self.ippp[type_] == name_ip[1]] = name_ip[0]
+                        self.ippp[f'fmc_name_{type_}_install'].loc[self.ippp[type_] == name_ip[1]] = False
             else:
                 # check if port data already exist on fmc
                 for port_info in self.port_data:
-                    port_protco = self.ppsm[(self.ppsm[type_] == port_info[2]) & (self.ppsm['protocol'] == port_info[1])]
+                    port_protco = self.ippp[(self.ippp[type_] == port_info[2]) & (self.ippp['protocol'] == port_info[1])]
                     if not port_protco.empty:
-                        self.ppsm[f'fmc_name_{type_}'].loc[(self.ppsm[type_] == port_info[2]) & (self.ppsm['protocol'] == port_info[1])] = port_info[0]
-                        self.ppsm[f'fmc_name_{type_}_install'].loc[(self.ppsm[type_] == port_info[2]) & (self.ppsm['protocol'] == port_info[1])] = False
+                        self.ippp[f'fmc_name_{type_}'].loc[(self.ippp[type_] == port_info[2]) & (self.ippp['protocol'] == port_info[1])] = port_info[0]
+                        self.ippp[f'fmc_name_{type_}_install'].loc[(self.ippp[type_] == port_info[2]) & (self.ippp['protocol'] == port_info[1])] = False
 
             # group the common IPs and ports into unique and push all objects in bulk
-            install_pd = self.ppsm[self.ppsm[f'fmc_name_{type_}_install'] == True]
+            install_pd = self.ippp[self.ippp[f'fmc_name_{type_}_install'] == True]
             install_pd = install_pd[install_pd[type_] != 'any']
             if type_ in ['source','destination']:
                 self.fmc_net_port_info()
                 install_pd[f'fmc_name_{type_}'] = install_pd[type_].apply(lambda net: f'{net.split("/")[0]}_{net.split("/")[1]}' if '/' in net else net)
-                if not self.ppsm[type_][(self.ppsm[f'fmc_name_{type_}_install'] == True) & (self.ppsm[type_] != 'any')].empty:
-                    self.ppsm[f'fmc_name_{type_}'] = self.ppsm[type_][(self.ppsm[f'fmc_name_{type_}_install'] == True) & (self.ppsm[type_] != 'any')].apply(lambda net: f'{net.split("/")[0]}_{net.split("/")[1]}' if '/' in net else net)
+                if not self.ippp[type_][(self.ippp[f'fmc_name_{type_}_install'] == True) & (self.ippp[type_] != 'any')].empty:
+                    self.ippp[f'fmc_name_{type_}'] = self.ippp[type_][(self.ippp[f'fmc_name_{type_}_install'] == True) & (self.ippp[type_] != 'any')].apply(lambda net: f'{net.split("/")[0]}_{net.split("/")[1]}' if '/' in net else net)
                 net_data = [nd[0] for nd in self.net_data]
                 net_list = list(set([net for net in install_pd[f'fmc_name_{type_}'] if '_' in net]))
                 net_list = [{'name': net, 'value': net.replace('_','/')} for net in net_list if net not in net_data]
@@ -212,13 +212,13 @@ class AugmentedWorker:
                         i = group_port.get_group(i)
                         i = i.iloc[0]
                         ipd = install_pd['service'][(install_pd['port'] == i['port']) & (install_pd['protocol'] == i['protocol'])]
-                        spipd = self.ppsm['service'][(self.ppsm['port'] == i['port']) & (self.ppsm['protocol'] == i['protocol'])]
+                        spipd = self.ippp['service'][(self.ippp['port'] == i['port']) & (self.ippp['protocol'] == i['protocol'])]
                         install_pd[f'fmc_name_{type_}'][ipd.index.tolist()] = ipd.iloc[0]
-                        self.ppsm[f'fmc_name_{type_}'][spipd.index.tolist()] = spipd.iloc[0]
+                        self.ippp[f'fmc_name_{type_}'][spipd.index.tolist()] = spipd.iloc[0]
 
                     port_data = [po[0] for po in self.port_data]
                     install_pd[f'fmc_name_{type_}'] = install_pd[f'fmc_name_{type_}'].apply(lambda port: port.replace(" ","-"))
-                    self.ppsm[f'fmc_name_{type_}'] = self.ppsm[f'fmc_name_{type_}'].apply(lambda port: port.replace(" ","-"))
+                    self.ippp[f'fmc_name_{type_}'] = self.ippp[f'fmc_name_{type_}'].apply(lambda port: port.replace(" ","-"))
 
                     port_list = list(set([port for port in install_pd[f'fmc_name_{type_}'] if port not in port_data]))
                     port_list = [{'name': port, "protocol": install_pd['protocol'][install_pd[f'fmc_name_{type_}'] == port].iloc[0], 'port': install_pd['port'][install_pd[f'fmc_name_{type_}'] == port].iloc[0]} for port in port_list]
@@ -430,27 +430,27 @@ class AugmentedWorker:
         return ruleset
 
     def _get_sn_match(self, type_, i):
-        if self.ppsm[type_][i] == 'any':
+        if self.ippp[type_][i] == 'any':
             return {f"{type_}_zone": 'any', f'{type_}_network': 'any'}
         elif self.zbr_bypass is not None:
-            # index of bypass MUST match ppsm index
-            return {f"{type_}_zone": str(self.zbr_bypass[type_][i]), f'{type_}_network': self.ppsm[f'fmc_name_{type_}'][i]}
+            # index of bypass MUST match ippp index
+            return {f"{type_}_zone": str(self.zbr_bypass[type_][i]), f'{type_}_network': self.ippp[f'fmc_name_{type_}'][i]}
 
-        ppsm_subnet = ip_network(self.ppsm[type_][i])
+        ippp_subnet = ip_network(self.ippp[type_][i])
         # if we need to find where a host address lives exactly
-        if '/' not in self.ppsm[type_][i] or '/32' in self.ppsm[type_][i]:
+        if '/' not in self.ippp[type_][i] or '/32' in self.ippp[type_][i]:
             for p in self.zone_ip_info.index:
                 asp_subnet = self.zone_ip_info['ip_cidr'][p]
-                if ppsm_subnet.subnet_of(ip_network(asp_subnet)):
-                    return {f"{type_}_zone": self.zone_ip_info['ZONE'][p], f'{type_}_network': self.ppsm[f'fmc_name_{type_}'][i]}
+                if ippp_subnet.subnet_of(ip_network(asp_subnet)):
+                    return {f"{type_}_zone": self.zone_ip_info['ZONE'][p], f'{type_}_network': self.ippp[f'fmc_name_{type_}'][i]}
         # if we need to find all zones a subnet might reside
-        elif '/' in self.ppsm[type_][i]:
-            zone_group = tuple(list(set([self.zone_ip_info['ZONE'][p] for p in self.zone_ip_info.index if ip_network(self.zone_ip_info['ip_cidr'][p]).subnet_of(ppsm_subnet)])))
+        elif '/' in self.ippp[type_][i]:
+            zone_group = tuple(list(set([self.zone_ip_info['ZONE'][p] for p in self.zone_ip_info.index if ip_network(self.zone_ip_info['ip_cidr'][p]).subnet_of(ippp_subnet)])))
             if len(zone_group) != 0:
                 zone_group = zone_group if len(zone_group) > 1 else zone_group[0]
-                return {f"{type_}_zone": zone_group, f'{type_}_network': self.ppsm[f'fmc_name_{type_}'][i]}
+                return {f"{type_}_zone": zone_group, f'{type_}_network': self.ippp[f'fmc_name_{type_}'][i]}
         # if we dont know where this zone is coming it must be from external
-        return {f"{type_}_zone": self.zone_of_last_resort, f'{type_}_network': self.ppsm[f'fmc_name_{type_}'][i]}
+        return {f"{type_}_zone": self.zone_of_last_resort, f'{type_}_network': self.ippp[f'fmc_name_{type_}'][i]}
 
     def del_fmc_objects(self,type_,obj_type:str=None,where:str=None):
         """PLEASE BE AS SPECIFIC AS POSSIBLE"""
@@ -524,7 +524,7 @@ class AugmentedWorker:
                 raise TypeError(f'zbr_bypass is a {type(self.zbr_bypass)} object not dict')
 
         # sort rules in a pretty format
-        for i in self.ppsm.index:
+        for i in self.ippp.index:
             rule_flow = {}
             src_flow = self._get_sn_match('source', i)
             dst_flow = self._get_sn_match('destination', i)
@@ -533,8 +533,8 @@ class AugmentedWorker:
                 continue
             rule_flow.update(src_flow)
             rule_flow.update(dst_flow)
-            rule_flow.update({'port': self.ppsm['fmc_name_port'][i] if self.ppsm['port'][i] != 'any' else 'any'})
-            rule_flow.update({'comment': self.ppsm['ticket_id'][i]})
+            rule_flow.update({'port': self.ippp['fmc_name_port'][i] if self.ippp['port'][i] != 'any' else 'any'})
+            rule_flow.update({'comment': self.ippp['ticket_id'][i]})
             ruleset.append(rule_flow)
 
         ruleset = pd.DataFrame(ruleset)
@@ -782,8 +782,8 @@ class AugmentedWorker:
         # self.zone_ip_info = pd.read_csv('temp_zii.csv')
         # get network and port information via rest
         self.fmc_net_port_info()
-        # pull information from PPSM
-        self.ppsm = self.retrieve_ppsm()
+        # pull information from ippp
+        self.ippp = self.retrieve_ippp()
         # create FMC objects
         self.create_fmc_object_names()
         # restart conn??
@@ -818,7 +818,7 @@ class AugmentedWorker:
 
 
 if __name__ == "__main__":
-    augWork = AugmentedWorker(ppsm_location='gfrs.csv',access_policy='test12',ftd_host='10.11.6.191',fmc_host='10.11.6.60',rule_prepend_name='test_st_beta_1',zone_of_last_resort='outside_zone',same_cred=False,cred_file='cF.json')
+    augWork = AugmentedWorker(ippp_location='gfrs.csv', access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_1', zone_of_last_resort='outside_zone', same_cred=False, cred_file='cF.json')
     # augWork.policy_manipulation_flow()
     augWork.rest_connection()
     augWork.del_fmc_objects(type_='rule',where='test_st_beta_1')

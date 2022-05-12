@@ -32,35 +32,31 @@ OObasuyi/paramiko (for FIPS compliance)
 ```python
 from auto_fmc import AugmentedWorker
 
-# cred file must be imported see example_cred.json
-augWork = AugmentedWorker(cred_file='cred_file.json', ppsm_location='pps_file.csv', access_policy='acp')
+# will ask for the creds on the terminal
+augWork = AugmentedWorker(ippp_location='ippp_rel4.csv',access_policy='acp',ftd_host='10.11.6.191',fmc_host='10.11.6.60',rule_prepend_name='zoom_rules',zone_of_last_resort='outside_zone',same_cred=True)
 
 # starts workflow
 augWork.policy_manipulation_flow()
 ```
 ### Command line interface
 ```console
-user@machine:~/SilverTorch$ python3 terminal_entry.py -fmc_host 10.11.6.60 -ftd_host 10.11.6.191 -ppsm_location gfrs.csv -access_policy test_acp -zolr outside_zone
+user@machine:~/SilverTorch$ python3 terminal_entry.py -fmc_host 10.11.6.60 -ftd_host 10.11.6.191 -ippp_location gfrs.csv -access_policy test_acp -zolr outside_zone
 ```
 ### console options
 ```console
-optional arguments:
-  -h, --help            show this help message and exit
-
-Mandatory Args:
+SilverTorch Mandatory Fields:
   -fmc_host FMC_HOST
   -ftd_host FTD_HOST
-  -ppsm_location PPSM_LOCATION
+  -ippp_location ippp_LOCATION
   -access_policy ACCESS_POLICY
   -rule_prepend_name RULE_PREPEND_NAME
   -zolr ZOLR            zone of last resort
 
-Optional Args:
+SilverTorch Optional Fields:
   --domain DOMAIN
   --zbr_bypass ZBR_BYPASS
   --cred_file CRED_FILE
-   --same_creds SAME_CREDS True or False/case-sensitive
-
+  --same_creds SAME_CREDS True or False/case-sensitive
 ```
 ## CAT-FAQs
 1. **Q. Well how does this deal with rule deduplication????**  
