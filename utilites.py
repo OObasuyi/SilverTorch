@@ -90,25 +90,6 @@ def deprecated(func):
         return func(*args)
     return wrapper
 
-def change_row_vals(f_name:str,replace_with:list,to_look_for,col,return_pd=False):
-    pd_crv = pd.read_csv(f_name)
-    chg_list = pd_crv[col].tolist()
-    other_rows = pd_crv.drop(columns=[col])
-    new_changes = pd_crv.copy()
-    for x in pd_crv.index:
-        if pd_crv[col][x] == to_look_for:
-            for y in replace_with:
-                oth_ro = other_rows.loc[x].to_dict()
-                oth_ro[col] = y
-                new_changes = new_changes.append(oth_ro,ignore_index=True)
-
-    new_changes.drop_duplicates(inplace=True)
-    new_changes = new_changes[new_changes[col] != to_look_for]
-    if return_pd:
-        return new_changes
-    else:
-        new_changes.to_csv(f'new_{f_name}',index=False)
-
 
 def permission_check(deploy_msg:str):
     if not isinstance(deploy_msg,str):
