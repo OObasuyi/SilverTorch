@@ -55,6 +55,8 @@ SilverTorch Optional Fields:
   --zbr_bypass ZBR_BYPASS
   --cred_file CRED_FILE
   --same_creds SAME_CREDS True or False/case-sensitive
+  --ruleset_type RULESET_TYPE ALLOW OR DENY TYPE OF RULESET
+
 ```
 ## CAT-FAQs
 1. **Q. Well how does this deal with rule deduplication????**  

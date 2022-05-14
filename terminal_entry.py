@@ -18,6 +18,7 @@ def terminal_entry():
     optional_args.add_argument('--zbr_bypass',default=None,action="store",type=str)
     optional_args.add_argument('--cred_file', default=None, type=str)
     optional_args.add_argument('--same_creds', default=True,help='True or False/case-sensitive', type=bool)
+    optional_args.add_argument('--ruleset_type', default='ALLOW',help='ALLOW OR DENY TYPE OF RULESET', type=bool)
 
     args = parser.parse_args()
     # handle optional None input
@@ -25,7 +26,7 @@ def terminal_entry():
 
     fm = AugmentedWorker(cred_file=args.cred_file, ippp_location=args.ippp_location, access_policy=args.access_policy,
                          rule_prepend_name=args.rule_prepend_name, fmc_host=args.fmc_host, ftd_host=args.ftd_host, domain=args.domain, zbr_bypass=args.zbr_bypass,
-                         zone_of_last_resort=args.zolr, same_cred=args.same_creds)
+                         zone_of_last_resort=args.zolr, same_cred=args.same_creds,ruleset_type=args.ruleset_type)
     fm.policy_manipulation_flow()
 
 
