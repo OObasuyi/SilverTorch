@@ -20,7 +20,8 @@ pd.options.mode.chained_assignment = None
 class AugmentedWorker:
 
     def __init__(self, cred_file: str = None, fmc_host='', ftd_host='', domain='Global',
-            ippp_location='ippp_test_file.csv', access_policy='test_acp', zbr_bypass: dict = None,rule_prepend_name='firewall',zone_of_last_resort='outside',same_cred=True):
+            ippp_location='ippp_test_file.csv', access_policy='test_acp', zbr_bypass: dict = None,
+            rule_prepend_name='firewall',zone_of_last_resort='outside',same_cred=True,ruleset_type='ALLOW'):
         """
         @param cred_file: JSON file hosting user/pass information DEPRECATED
         @param fmc_host: FMC domain or IP address
@@ -33,6 +34,7 @@ class AugmentedWorker:
         where facetime_rule is the prepend var, allow_facetime is the comment and number is unique set of characters to distinguish the rule
         @@param zone_of_last_resort: this is needed when we dont know where a route lives relative to their Zone ie we know that a IP is northbound of our gateway or outside interface.
         @@param same_cred: whether all creds to login devices use the same user and password combination
+        @@param ruleset_type: rules can only be inserted as all allow or denies
         """
         creds = self.get_device_creds(cred_file=cred_file,same_cred=same_cred)
         # Sec-lint #1
@@ -52,6 +54,7 @@ class AugmentedWorker:
         self.zbr_bypass = zbr_bypass
         self.rule_prepend_name = rule_prepend_name
         self.zone_of_last_resort = zone_of_last_resort
+        self.ruleset_type = ruleset_type
         self.logfmc = LogCollector()
 
     def _creation_check(self,response, new_obj, output=True):
@@ -663,10 +666,12 @@ class AugmentedWorker:
         ruleset.to_csv(ruleset_loc, index=False)
         permission_check(f'REVIEW PRE-DEPLOY RULESET FILE located at {ruleset_loc}')
 
-        temp_form = {"action": "ALLOW", "enabled": 'true', "type": "AccessRule",
-            "name": "Rule2", "sendEventsToFMC": 'true', "enableSyslog": 'true',
-            "logFiles": 'false', "logBegin": 'false', "logEnd": 'true'}
-
+        temp_form = {
+            "action": self.ruleset_type, "enabled": 'true', "type": "AccessRule",
+            "name": "template_rule", "sendEventsToFMC": 'true', "enableSyslog": 'true',
+            "logFiles": 'false',
+            "logBegin": 'false' if self.ruleset_type == 'ALLOW' else 'true', "logEnd": 'true' if self.ruleset_type != 'ALLOW' else 'false'
+        }
         # get all zone info
         all_zones = {fix_object(i)[0]['name']:fix_object(i)[0] for i in self.fmc.object.securityzone.get()}
         # create a bulk policy push operation
