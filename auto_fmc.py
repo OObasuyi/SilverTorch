@@ -670,7 +670,7 @@ class AugmentedWorker:
             "action": self.ruleset_type, "enabled": 'true', "type": "AccessRule",
             "name": "template_rule", "sendEventsToFMC": 'true', "enableSyslog": 'true',
             "logFiles": 'false',
-            "logBegin": 'false' if self.ruleset_type == 'ALLOW' else 'true', "logEnd": 'true' if self.ruleset_type != 'ALLOW' else 'false'
+            "logBegin": 'true' if self.ruleset_type == 'DENY' else 'false', "logEnd": 'true' if self.ruleset_type == 'ALLOW' else 'false'
         }
         # get all zone info
         all_zones = {fix_object(i)[0]['name']:fix_object(i)[0] for i in self.fmc.object.securityzone.get()}
