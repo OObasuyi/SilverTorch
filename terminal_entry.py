@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 from auto_fmc import AugmentedWorker
+from test_run import TestRun
 
 
 def terminal_entry():
@@ -14,6 +15,7 @@ def terminal_entry():
     mandatory_args.add_argument('-zolr',help='zone of last resort', required=True,type=str)
 
     optional_args = parser.add_argument_group(title='SilverTorch Optional Fields')
+    optional_args.add_argument('--ippp_checkup',default=False, help='Check whether the IPPP is found in the ACP', type=bool)
     optional_args.add_argument('--domain',default='Global',action="store",type=str)
     optional_args.add_argument('--zbr_bypass',default=None,action="store",type=str)
     optional_args.add_argument('--cred_file', default=None, type=str)
@@ -28,8 +30,12 @@ def terminal_entry():
 
     fm = AugmentedWorker(cred_file=args.cred_file, ippp_location=args.ippp_location, access_policy=args.access_policy,
                          rule_prepend_name=args.rule_prepend_name, fmc_host=args.fmc_host, ftd_host=args.ftd_host, domain=args.domain, zbr_bypass=args.zbr_bypass,
-                         zone_of_last_resort=args.zolr, same_cred=args.same_creds,ruleset_type=args.ruleset_type.upper())
-    fm.policy_manipulation_flow()
+                         zone_of_last_resort=args.zolr, same_cred=args.same_creds,ruleset_type=args.ruleset_type)
+
+    if args.ippp_checkup:
+        fm.policy_manipulation_flow(checkup=True)
+    else:
+        fm.policy_manipulation_flow()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import pandas as pd
 from ipaddress import ip_network
 from datetime import datetime
+from tqdm import tqdm
 
 
 class TestRun:
@@ -8,6 +9,7 @@ class TestRun:
         self.auto_fmc = af_class
 
     def compare_ipp_acp(self):
+        self.auto_fmc.zbr_bypass_check()
         test_ippp = self.auto_fmc.ippp[['source','destination','protocol','port']]
         for port_info in self.auto_fmc.port_data:
             port_protco = test_ippp[(test_ippp['port'] == port_info[2]) & (test_ippp['protocol'] == port_info[1])]
@@ -18,6 +20,7 @@ class TestRun:
         acp_rules = self.auto_fmc.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id['id'])
         acp_rules = self.auto_fmc.utils.transform_acp(acp_rules, self.auto_fmc)
         acp_rules.replace({'None': 'any'}, inplace=True)
+
 
         ruleset = []
         same_zone_counter = 0
@@ -47,7 +50,7 @@ class TestRun:
             acp_rules[ip] = acp_rules[ip].apply(lambda p: self.auto_fmc.fdp_grouper(p, 'ip'))
 
         found_in_policy = []
-        for ti in test_ippp.index:
+        for ti in tqdm(test_ippp.index,desc='checking uniqueness of ruleset',colour='#FFA500',total=len(test_ippp.index)):
             match_found = 0
             for ai in acp_rules.index:
                 test_rule = test_ippp.loc[ti]
@@ -95,7 +98,7 @@ class TestRun:
 
             if match_found >= 5:
                 found_in_policy.append(ti)
-        self.auto_fmc.logfmc.logger.warning(f'Found {len(found_in_policy)} of {len(test_ippp)} implemented in ACP')
+        self.auto_fmc.logfmc.logger.warning(f'Found {len(found_in_policy)} of {len(test_ippp)} from IPPP implemented in ACP')
         if len(found_in_policy) != len(test_ippp):
             dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
             not_found_rules = self.auto_fmc.utils.create_file_path(folder='404_rules',file_name=f'{self.auto_fmc.rule_prepend_name}_orphaned_rules_{dt_now}.csv')

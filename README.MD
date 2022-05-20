@@ -51,6 +51,7 @@ SilverTorch Mandatory Fields:
   -zolr ZOLR            zone of last resort
 
 SilverTorch Optional Fields:
+ --ippp_checkup IPPP_CHECKUP Check whether the IPPP is found in the ACP
   --domain DOMAIN
   --zbr_bypass ZBR_BYPASS
   --cred_file CRED_FILE

@@ -19,9 +19,10 @@ pd.options.mode.chained_assignment = None
 
 class AugmentedWorker:
 
-    def __init__(self, cred_file: str = None, fmc_host='', ftd_host='', domain='Global',
-            ippp_location='ippp_test_file.csv', access_policy='test_acp', zbr_bypass: dict = None,
-            rule_prepend_name='firewall', zone_of_last_resort='outside', same_cred=True, ruleset_type='ALLOW'):
+    def __init__(self, fmc_host:str, ftd_host:str,ippp_location:str,
+            access_policy:str, rule_prepend_name:str,zone_of_last_resort:str,
+            zbr_bypass: dict = None,same_cred=True, ruleset_type='ALLOW',
+            cred_file: str = None,domain='Global'):
         """
         @param cred_file: JSON file hosting user/pass information DEPRECATED
         @param fmc_host: FMC domain or IP address
@@ -55,7 +56,7 @@ class AugmentedWorker:
         self.zbr_bypass = zbr_bypass
         self.rule_prepend_name = rule_prepend_name
         self.zone_of_last_resort = zone_of_last_resort
-        self.ruleset_type = ruleset_type
+        self.ruleset_type = ruleset_type.upper()
         self.logfmc = LogCollector()
 
     def _creation_check(self, response, new_obj, output=True):
@@ -516,16 +517,7 @@ class AugmentedWorker:
         else:
             raise NotImplementedError(f'type_ not found please select rule, port, or network. you passed {type_}')
 
-    def create_acp_rule(self):
-        ruleset = []
-
-        def fix_object(x):
-            try:
-                x = x[0]
-            except:
-                x = x
-            return [{'name': x['name'], 'id': x['id'], 'type': x['type']}]
-
+    def zbr_bypass_check(self):
         if self.zbr_bypass is None:
             self.zone_ip_info['ip_cidr'] = self.zone_ip_info['IP'].astype(str) + '/' + self.zone_ip_info['CIDR'].astype(str)
             # sort df by subnet size to find the closet match first
@@ -535,6 +527,16 @@ class AugmentedWorker:
             if not isinstance(self.zbr_bypass, dict):
                 raise TypeError(f'zbr_bypass is a {type(self.zbr_bypass)} object not dict')
 
+    def create_acp_rule(self):
+        ruleset = []
+
+        def fix_object(x):
+            try:
+                x = x[0]
+            except:
+                x = x
+            return [{'name': x['name'], 'id': x['id'], 'type': x['type']}]
+        self.zbr_bypass_check()
         # sort rules in a pretty format
         for i in self.ippp.index:
             rule_flow = {}
@@ -759,7 +761,7 @@ class AugmentedWorker:
         except Exception as error:
             self.logfmc.logger.error(error)
 
-    def policy_manipulation_flow(self):
+    def policy_manipulation_flow(self,checkup=False):
         # login FMC
         self.rest_connection()
         # Get zone info first via ClI
@@ -774,10 +776,13 @@ class AugmentedWorker:
         self.create_fmc_object_names()
         # restart conn??
         self.rest_connection(reset=True)
-        # create FMC rules
-        self.create_acp_rule()
-        # test rule creation
-        tc = TestRun(augWork).compare_ipp_acp()
+        if checkup:
+            TestRun(self).compare_ipp_acp()
+        else:
+            # create FMC rules
+            self.create_acp_rule()
+            # test rule Checkup
+            TestRun(self).compare_ipp_acp()
 
     @staticmethod
     @deprecated
@@ -806,7 +811,8 @@ class AugmentedWorker:
 
 if __name__ == "__main__":
     augWork = AugmentedWorker(ippp_location='gfrs.csv', access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone', same_cred=False, cred_file='cF.json')
-    augWork.policy_manipulation_flow()
-    # augWork.rest_connection()
-    # augWork.del_fmc_objects(type_='port',where='all',obj_type='all')
+    # augWork.policy_manipulation_flow(checkup=True)
+    augWork.rest_connection()
+    augWork.del_fmc_objects(type_='port',where='all',obj_type='all')
+    augWork.del_fmc_objects(type_='network',where='all',obj_type='all')
     # augWork.del_fmc_objects(type_='network',where='all',obj_type='all')
