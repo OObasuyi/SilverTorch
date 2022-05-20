@@ -1,5 +1,5 @@
 # FirePyower (AKA SilverTorch) 
-This script stages rules into the FMC. It also inserts rules based on their port/application to create a more app-controlled firewall.
+This script stages rules into the FMC. It also inserts rules based on their Zone to create an automated Zone Based firewall.
 
 ## As Palpatine would say *DO IT*
 1. get CSV
@@ -18,8 +18,6 @@ This script stages rules into the FMC. It also inserts rules based on their port
 1. if you new ip information and dont want to use the fastpath info to find the correct zone to put the IP, the zbr_bypass argument MUST match the row lines of the PPS rows
 2. any IP that doesn't have a fastpath match can have a zone assigned to it using the zone_of_last_resort argument
 
-## WIPS
- 1. better error and log handling
 ## Main Dependencies
 pandas \
 netmiko \
@@ -53,10 +51,13 @@ SilverTorch Mandatory Fields:
   -zolr ZOLR            zone of last resort
 
 SilverTorch Optional Fields:
+ --ippp_checkup IPPP_CHECKUP Check whether the IPPP is found in the ACP
   --domain DOMAIN
   --zbr_bypass ZBR_BYPASS
   --cred_file CRED_FILE
   --same_creds SAME_CREDS True or False/case-sensitive
+  --ruleset_type RULESET_TYPE ALLOW OR DENY TYPE OF RULESET
+
 ```
 ## CAT-FAQs
 1. **Q. Well how does this deal with rule deduplication????**  

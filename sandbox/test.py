@@ -34,7 +34,7 @@ def gen_fake_rule_set(amount_of_rules=300,upload=False):
         proto_info = [choice(['TCP','UDP']) for _ in range(1,amount_of_rules)]
         src_ip_info = [".".join(str(randint(0, 255)) for _ in range(4)) for _ in range(1, amount_of_rules)]
         dest_ip_info = [".".join(str(randint(0, 255)) for _ in range(4)) for _ in range(1, amount_of_rules)]
-        tckt_ip_info = ["test" for _ in range(1, amount_of_rules)]
+        tckt_ip_info = ["test_run" for _ in range(1, amount_of_rules)]
         shuffle(src_ip_info)
         shuffle(dest_ip_info)
         gfrs_pd = {'source':src_ip_info,'destination' :dest_ip_info,'port_1':port_info,'port_2':port_info,'protocol':proto_info,'ticket_id':tckt_ip_info}
