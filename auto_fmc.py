@@ -1,16 +1,18 @@
+import json
 from copy import deepcopy
 from datetime import datetime
 from ipaddress import IPv4Network, ip_network
 from re import search, sub
-import json
-from logging_fmc import LogCollector
+from time import sleep
+
 import pandas as pd
 from fireREST import FMC
 from netmiko import ConnectHandler
 from tqdm import tqdm
-from utilites import util,deprecated
-from time import sleep
+
+from logging_fmc import LogCollector
 from test_run import TestRun
+from utilites import util, deprecated
 
 pd.options.display.max_columns = None
 pd.options.display.max_rows = None

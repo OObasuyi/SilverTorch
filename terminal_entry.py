@@ -1,6 +1,5 @@
 from argparse import ArgumentParser
 from auto_fmc import AugmentedWorker
-from test_run import TestRun
 
 
 def terminal_entry():

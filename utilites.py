@@ -1,8 +1,9 @@
-from logging import warning
-import pandas as pd
-from os import path,makedirs,replace
-from json import load,dump
 from functools import wraps
+from json import load, dump
+from logging import warning
+from os import path, makedirs, replace
+
+import pandas as pd
 
 
 class util:
@@ -128,7 +129,6 @@ class util:
         current_ruleset = changed_ruleset
         return pd.DataFrame(current_ruleset)
 
-
 def deprecated(func):
     fname = func.__name__
 
@@ -137,4 +137,5 @@ def deprecated(func):
         warning(f'the {fname} function is deprecated and will be removed in future releases')
         return func(*args)
     return wrapper
+
 
