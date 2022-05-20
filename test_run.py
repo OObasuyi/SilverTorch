@@ -96,12 +96,17 @@ class TestRun:
             if match_found >= 5:
                 found_in_policy.append(ti)
         self.auto_fmc.logfmc.logger.warning(f'Found {len(found_in_policy)} of {len(test_ippp)} implemented in ACP')
-        dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
-        not_found_rules = self.auto_fmc.utils.create_file_path(folder='404_rules',file_name=f'{self.auto_fmc.rule_prepend_name}_orphaned_rules_{dt_now}.csv')
-        test_ippp.drop(found_in_policy,inplace=True)
-        test_ippp.reset_index(inplace=True, drop=True)
-        test_ippp.to_csv(not_found_rules, index=False)
-        self.auto_fmc.logfmc.logger.warning(f'rules not found in ACP are located in {not_found_rules}')
+        if len(found_in_policy) != len(test_ippp):
+            dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
+            not_found_rules = self.auto_fmc.utils.create_file_path(folder='404_rules',file_name=f'{self.auto_fmc.rule_prepend_name}_orphaned_rules_{dt_now}.csv')
+            test_ippp.drop(found_in_policy,inplace=True)
+            test_ippp.reset_index(inplace=True, drop=True)
+            test_ippp.to_csv(not_found_rules, index=False)
+            self.auto_fmc.logfmc.logger.warning(f'rules not found in ACP are located in {not_found_rules}')
+            return False
+        else:
+            self.auto_fmc.logfmc.logger.warning(f'All Rules from IPPP implemented')
+            return True
 
 
 

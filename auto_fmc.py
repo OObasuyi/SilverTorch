@@ -566,65 +566,10 @@ class AugmentedWorker:
         except Exception as error:
             raise Exception(error)
 
-        # group by most distinct features
-        case1 = ruleset.groupby(['source_network', 'port'])
-        case2 = ruleset.groupby(['destination_network', 'port'])
-        ruleset_holder = []
-        dup_holder = []
-        for grouped_df, type_net in zip([case1, case2], ['source', 'destination']):
-            group_listing = grouped_df.size()[grouped_df.size() > 1].index.values.tolist()
-            for gl in group_listing:
-                concat_cols_type = 'destination' if type_net == 'source' else 'source'
-                concat_cols_type = 'port' if type_net == 'port' else concat_cols_type
-                group = grouped_df.get_group(gl)
-                # get idx dups of the main ruleset to remove
-                dup_holder += group.index.to_list()
-                if type_net == 'source' or type_net == 'destination':
-                    cct_net = f'{concat_cols_type}_network'
-                    cct_zone = f'{concat_cols_type}_zone'
-                    cct_net_data = list(set(group[cct_net].to_list()))
-                    cct_zone_data = list(set(group[cct_zone].to_list()))
-                    group = group.iloc[0]
-                    if len(cct_net_data) == 1:
-                        group[cct_net] = cct_net_data[0]
-                    else:
-                        group[cct_net] = sorted(cct_net_data)
-                    if len(cct_zone_data) == 1:
-                        group[cct_zone] = cct_zone_data[0]
-                    else:
-                        try:
-                            group[cct_zone] = sorted(cct_zone_data)
-                        except:
-                            # needed due to [(many zones),zone,zone] problem
-                            all_zones = []
-                            for pull_all in cct_zone_data:
-                                if isinstance(pull_all, tuple):
-                                    for i in pull_all:
-                                        all_zones.append(i)
-                                else:
-                                    all_zones.append(pull_all)
-                            group[cct_zone] = sorted(all_zones)
-                # dup policy check
-                dup_seen = False
-                for rule_group in ruleset_holder:
-                    if group.to_dict() == rule_group:
-                        dup_seen = True
-                        break
-                if not dup_seen:
-                    ruleset_holder.append(group.to_dict())
-
-        ruleset.drop(ruleset.index[dup_holder], inplace=True)
-        ruleset = pd.concat([pd.DataFrame(ruleset_holder), ruleset], ignore_index=True)
-        ruleset.reset_index(inplace=True, drop=True)
-
-        # convert to tup for search
-        for col in ruleset.columns:
-            ruleset[col] = ruleset[col].apply(lambda x: tuple(v for v in x) if isinstance(x, list) else x)
-
         # agg by zone
         ruleset_holder = []
         case4 = ruleset.groupby(['destination_zone', 'source_zone'])
-        c4_listing = case4.size()[case4.size() > 1].index.values.tolist()
+        c4_listing = case4.size()[case4.size() >= 1].index.values.tolist()
         for gl in c4_listing:
             group = case4.get_group(gl)
             agg_src_net = []
@@ -860,7 +805,7 @@ class AugmentedWorker:
 
 
 if __name__ == "__main__":
-    augWork = AugmentedWorker(ippp_location='gfrs.csv', access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_1', zone_of_last_resort='outside_zone', same_cred=False, cred_file='cF.json')
+    augWork = AugmentedWorker(ippp_location='gfrs.csv', access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone', same_cred=False, cred_file='cF.json')
     augWork.policy_manipulation_flow()
     # augWork.rest_connection()
     # augWork.del_fmc_objects(type_='port',where='all',obj_type='all')
