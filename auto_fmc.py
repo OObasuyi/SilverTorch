@@ -576,21 +576,21 @@ class AugmentedWorker:
             group = case4.get_group(gl)
             agg_src_net = []
             for i in group['source_network'].tolist():
-                if not isinstance(i,str):
+                if isinstance(i,(list,tuple)):
                     for itr in i:
                         agg_src_net.append(itr)
                 else:
                     agg_src_net.append(i)
             agg_dst_net = []
             for i in group['destination_network'].tolist():
-                if not isinstance(i,str):
+                if isinstance(i,(list,tuple)):
                     for itr in i:
                         agg_dst_net.append(itr)
                 else:
                     agg_dst_net.append(i)
             agg_port = []
             for i in group['port'].tolist():
-                if not isinstance(i, str):
+                if isinstance(i, (list,tuple)):
                     for itr in i:
                         agg_port.append(itr)
                 else:
@@ -811,8 +811,8 @@ class AugmentedWorker:
 
 if __name__ == "__main__":
     augWork = AugmentedWorker(ippp_location='gfrs.csv', access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone', same_cred=False, cred_file='cF.json')
-    # augWork.policy_manipulation_flow(checkup=True)
-    augWork.rest_connection()
-    augWork.del_fmc_objects(type_='port',where='all',obj_type='all')
-    augWork.del_fmc_objects(type_='network',where='all',obj_type='all')
+    augWork.policy_manipulation_flow()
+    # augWork.rest_connection()
+    # augWork.del_fmc_objects(type_='port',where='all',obj_type='all')
+    # augWork.del_fmc_objects(type_='network',where='all',obj_type='all')
     # augWork.del_fmc_objects(type_='network',where='all',obj_type='all')
