@@ -1,6 +1,6 @@
 import pickle
 from random import randint, shuffle, choice
-from auto_fmc import AugmentedWorker
+from fw_deploy import FireStick
 import pandas as pd
 import utilites
 
@@ -63,12 +63,12 @@ def gen_fake_rule_set(amount_of_rules=300,upload=False):
 
 # def get_zbf_files_test():
 #     zbf_dict = utilites.csv_to_dict('zone_info.csv')
-#     slacker = AugmentedWorker(creds=dict(fmc_username='api_admin', fmc_password='1qaz!QAZ'),zbr_bypass=zbf_dict)
+#     slacker = FireStick(creds=dict(fmc_username='api_admin', fmc_password='1qaz!QAZ'),zbr_bypass=zbf_dict)
 
 
 
 if __name__ == "__main__":
-    # slacker = AugmentedWorker(creds = dict(fmc_username='api_admin',fmc_password='1qaz!QAZ'))
+    # slacker = FireStick(creds = dict(fmc_username='api_admin',fmc_password='1qaz!QAZ'))
     fg = 'HTTP(TCP)'
     import re
     qqq = re.sub('[^0-9a-zA-Z]+', '_', fg)

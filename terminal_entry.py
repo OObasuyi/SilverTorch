@@ -1,5 +1,5 @@
 from argparse import ArgumentParser
-from auto_fmc import AugmentedWorker
+from fw_deploy import FireStick
 
 
 def terminal_entry():
@@ -27,9 +27,9 @@ def terminal_entry():
     if args.ruleset_type not in ['ALLOW','DENY']:
         raise ValueError('RuleSet_type must be either allow or deny')
 
-    fm = AugmentedWorker(cred_file=args.cred_file, ippp_location=args.ippp_location, access_policy=args.access_policy,
-                         rule_prepend_name=args.rule_prepend_name, fmc_host=args.fmc_host, ftd_host=args.ftd_host, domain=args.domain, zbr_bypass=args.zbr_bypass,
-                         zone_of_last_resort=args.zolr, same_cred=args.same_creds,ruleset_type=args.ruleset_type)
+    fm = FireStick(cred_file=args.cred_file, ippp_location=args.ippp_location, access_policy=args.access_policy,
+                   rule_prepend_name=args.rule_prepend_name, fmc_host=args.fmc_host, ftd_host=args.ftd_host, domain=args.domain, zbr_bypass=args.zbr_bypass,
+                   zone_of_last_resort=args.zolr, same_cred=args.same_creds, ruleset_type=args.ruleset_type)
 
     if args.ippp_checkup:
         fm.policy_manipulation_flow(checkup=True)

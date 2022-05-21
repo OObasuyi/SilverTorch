@@ -1,13 +1,13 @@
 import logging
 import gzip
 from os import rename,remove
-from utilites import util
+from utilites import Util
 from logging.handlers import TimedRotatingFileHandler
 
 
 class LogCollector:
     def __init__(self,log_all=False):
-        fName = util().create_file_path('logs','firepyower.log')
+        fName = Util().create_file_path('logs', 'firepyower.log')
 
         if not log_all:
             self.logger = logging.getLogger(__name__)

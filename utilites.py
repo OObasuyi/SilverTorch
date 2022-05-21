@@ -6,7 +6,7 @@ from os import path, makedirs, replace
 import pandas as pd
 
 
-class util:
+class Util:
 
     @staticmethod
     def csv_to_dict(csv_file) -> dict:
@@ -116,18 +116,20 @@ class util:
             new_changes.to_csv(f_name,index=False)
 
     @staticmethod
-    def transform_acp(current_ruleset,self_object):
+    def transform_acp(current_ruleset,self_instance):
         changed_ruleset = []
         for i in current_ruleset:
             subset_rule = {}
-            subset_rule['src_z'] = self_object.find_nested_group_objects(i.get('sourceZones'))
-            subset_rule['dst_z'] = self_object.find_nested_group_objects(i.get('destinationZones'))
-            subset_rule['source'] = self_object.find_nested_group_objects(i.get('sourceNetworks'))
-            subset_rule['destination'] = self_object.find_nested_group_objects(i.get('destinationNetworks'))
-            subset_rule['port'] = self_object.find_nested_group_objects(i.get('destinationPorts'))
+            subset_rule['policy_name'] = i.get('name')
+            subset_rule['src_z'] = self_instance.find_nested_group_objects(i.get('sourceZones'))
+            subset_rule['dst_z'] = self_instance.find_nested_group_objects(i.get('destinationZones'))
+            subset_rule['source'] = self_instance.find_nested_group_objects(i.get('sourceNetworks'))
+            subset_rule['destination'] = self_instance.find_nested_group_objects(i.get('destinationNetworks'))
+            subset_rule['port'] = self_instance.find_nested_group_objects(i.get('destinationPorts'))
             changed_ruleset.append(subset_rule)
         current_ruleset = changed_ruleset
         return pd.DataFrame(current_ruleset)
+
 
 def deprecated(func):
     fname = func.__name__

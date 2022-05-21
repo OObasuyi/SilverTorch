@@ -3,8 +3,8 @@ from ipaddress import ip_network
 from datetime import datetime
 from tqdm import tqdm
 
-
-class TestRun:
+#todo: inherit class
+class FireCheck:
     def __init__(self,af_class):
         self.auto_fmc = af_class
 

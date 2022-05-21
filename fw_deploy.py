@@ -10,18 +10,18 @@ from fireREST import FMC
 from netmiko import ConnectHandler
 from tqdm import tqdm
 
-from logging_fmc import LogCollector
-from test_run import TestRun
-from utilites import util, deprecated
+from fw_logging import LogCollector
+from test_run import FireCheck
+from utilites import Util, deprecated
 
 pd.options.display.max_columns = None
 pd.options.display.max_rows = None
 pd.options.mode.chained_assignment = None
 
 
-class AugmentedWorker:
+class FireStick:
 
-    def __init__(self, fmc_host:str, ftd_host:str,ippp_location:str,
+    def __init__(self, fmc_host:str, ftd_host:str,ippp_location,
             access_policy:str, rule_prepend_name:str,zone_of_last_resort:str,
             zbr_bypass: dict = None,same_cred=True, ruleset_type='ALLOW',
             cred_file: str = None,domain='Global'):
@@ -39,7 +39,7 @@ class AugmentedWorker:
         @@param same_cred: whether all creds to login devices use the same user and password combination
         @@param ruleset_type: rules can only be inserted as all allow or denies
         """
-        self.utils = util()
+        self.utils = Util()
         creds = self.get_device_creds(cred_file=cred_file, same_cred=same_cred)
         # Sec-lint #1
         for v in list(creds.values()):
@@ -52,8 +52,10 @@ class AugmentedWorker:
         self.ftd_username = creds['ftd_username']
         self.ftd_password = creds['ftd_password']
         self.domain = domain
-        # this is just a check the file MUST be the folder
-        self.ippp_location = self.utils.create_file_path('ingestion', ippp_location)
+        # some calls might not need a ippp file
+        if ippp_location is not None:
+            # this is just a check the file MUST be the folder
+            self.ippp_location = self.utils.create_file_path('ingestion', ippp_location)
         self.access_policy = access_policy
         self.zbr_bypass = zbr_bypass
         self.rule_prepend_name = rule_prepend_name
@@ -448,77 +450,6 @@ class AugmentedWorker:
         # if we dont know where this zone is coming it must be from external
         return {f"{type_}_zone": self.zone_of_last_resort, f'{type_}_network': self.ippp[f'fmc_name_{type_}'][i]}
 
-    def del_fmc_objects(self, type_, obj_type,where):
-        """PLEASE BE AS SPECIFIC AS POSSIBLE"""
-        # get the latest created objects
-        self.fmc_net_port_info()
-        if not isinstance(where, str):
-            raise ValueError(f'where value is not type str. you passed an {type(where)} object')
-        self.utils.permission_check(f'Are you sure you want to delete {obj_type.upper()} ***{where}*** {type_} objects?')
-        if type_ == 'network':
-            def net_delete():
-                del_list = [i[2] for i in self.net_data if where in i[0]] if where != 'all' else [i[2] for i in self.net_data]
-                for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {obj_type} objects'):
-                    try:
-                        if '/' in obj_id[1]:
-                            self.fmc.object.network.delete(obj_id)
-                        else:
-                            self.fmc.object.host.delete(obj_id)
-                    except Exception as error:
-                        self.logfmc.logger.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
-
-            def net_port_delete():
-                del_list = [i[2] for i in self.net_group_object if where in i[0]] if where != 'all' else [i[2] for i in self.net_group_object]
-                for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {obj_type} objects'):
-                    try:
-                        self.fmc.object.networkgroup.delete(obj_id)
-                    except Exception as error:
-                        self.logfmc.logger.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
-
-            if obj_type == 'net':
-                net_delete()
-            elif obj_type == 'net_group':
-                net_port_delete()
-            elif obj_type == 'all':
-                net_port_delete()
-                net_delete()
-
-        elif type_ == 'port':
-            def del_port():
-                del_list = [i[3] for i in self.port_data if where in i[0]] if where != 'all' else [i[3] for i in self.port_data]
-                for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {obj_type} objects'):
-                    try:
-                        self.fmc.object.protocolportobject.delete(obj_id)
-                    except Exception as error:
-                        self.logfmc.logger.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
-
-            def del_port_group():
-                del_list = [i[2] for i in self.port_group_object if where in i[0]] if where != 'all' else [i[2] for i in self.port_group_object]
-                for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {obj_type} objects'):
-                    try:
-                        self.fmc.object.portobjectgroup.delete(obj_id)
-                    except Exception as error:
-                        self.logfmc.logger.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
-            if obj_type == 'port':
-                del_port()
-            elif obj_type == 'port_group':
-                del_port_group()
-            elif obj_type == 'all':
-                del_port_group()
-                del_port()
-
-        elif type_ == 'rule':
-            acp_id = self.fmc.policy.accesspolicy.get(name=self.access_policy)
-            acp_rules = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id['id'])
-            del_list = [i['name'] for i in acp_rules if where in i['name']] if where != 'all' else acp_rules
-            for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {where} rules'):
-                try:
-                    self.fmc.policy.accesspolicy.accessrule.delete(container_uuid=acp_id['id'], name=obj_id)
-                except Exception as error:
-                    self.logfmc.logger.error(f'Cannot delete {obj_id} from set {where} for rules \n received code: {error}')
-        else:
-            raise NotImplementedError(f'type_ not found please select rule, port, or network. you passed {type_}')
-
     def zbr_bypass_check(self):
         if self.zbr_bypass is None:
             self.zone_ip_info['ip_cidr'] = self.zone_ip_info['IP'].astype(str) + '/' + self.zone_ip_info['CIDR'].astype(str)
@@ -779,17 +710,17 @@ class AugmentedWorker:
         # restart conn??
         self.rest_connection(reset=True)
         if checkup:
-            TestRun(self).compare_ipp_acp()
+            FireCheck(self).compare_ipp_acp()
         else:
             # create FMC rules
             self.create_acp_rule()
             # test rule Checkup
-            TestRun(self).compare_ipp_acp()
+            FireCheck(self).compare_ipp_acp()
 
     @staticmethod
     @deprecated
     def _get_device_creds(cred_file):
-        cred_file = util().create_file_path('safe', cred_file)
+        cred_file = Util().create_file_path('safe', cred_file)
         with open(cred_file, 'r') as cf:
             return json.load(cf)
 
@@ -811,8 +742,9 @@ class AugmentedWorker:
         return cdict
 
 
+# todo: need to test run again since we change how ACP looks like
 if __name__ == "__main__":
-    augWork = AugmentedWorker(ippp_location='gfrs.csv', access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone', same_cred=False, cred_file='cF.json')
+    augWork = FireStick(ippp_location='gfrs.csv', access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone', same_cred=False, cred_file='cF.json')
     augWork.policy_manipulation_flow()
     # augWork.rest_connection()
     # augWork.del_fmc_objects(type_='port',where='all',obj_type='all')
