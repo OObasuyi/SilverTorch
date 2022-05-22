@@ -315,7 +315,7 @@ class FireStick:
             else:
                 return sorted(list(set(f"{px[1]}:{px[2]}" for rulep in p for px in self.port_data if rulep == px[0])))
 
-    def find_dup_policies(self, ruleset, acp_set):
+    def find_inter_dup_policies(self, ruleset, acp_set):
         def flatten(d):
             out = {}
             for key, val in d.items():
@@ -481,7 +481,7 @@ class FireStick:
         if ruleset.empty:
             raise Exception('NOTHING IN RULESET THEY MIGHT ALL BE THE SAME ZONE')
         acp_set = self.fmc.policy.accesspolicy.get(name=self.access_policy)
-        ruleset = self.find_dup_policies(ruleset, acp_set)
+        ruleset = self.find_inter_dup_policies(ruleset, acp_set)
 
         # if we removed all the dups and we have no new rules or for some reason we dont have rules to deploy raise to stop the program
         try:
@@ -544,7 +544,7 @@ class FireStick:
             ruleset[col] = ruleset[col].apply(lambda x: list(v for v in x) if isinstance(x, tuple) else x)
 
         # since we grouped policy find the dups again and get rid of em
-        ruleset = self.find_dup_policies(ruleset, acp_set)
+        ruleset = self.find_inter_dup_policies(ruleset, acp_set)
         if ruleset.empty:
             self.logfmc.warning('NO RULES TO DEPLOY')
             return

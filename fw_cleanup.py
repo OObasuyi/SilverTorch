@@ -97,7 +97,8 @@ class FireBroom(FireStick):
     def collapse_fmc_rules(self,comment:str=False,recover:bool=False):
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
         save_ext = 'rulbk'
-        recovery_loc = self.utils.create_file_path('temp',f'{self.rule_prepend_name}_save_{dt_now}.{save_ext}')
+        recovery_fname = f'{self.rule_prepend_name}_save_{dt_now}.{save_ext}'
+        recovery_loc = self.utils.create_file_path('temp',recovery_fname)
         if not isinstance(comment,str):
             raise ValueError('COMMENT VALUE MUST BE PASSED')
         acp_id, acp_rules = self.rule_objects()
@@ -127,48 +128,53 @@ class FireBroom(FireStick):
             acp_rules[col] = acp_rules[col].apply(lambda x: tuple(v for v in x) if isinstance(x, list) else x)
         # fill in vals that are really any
         acp_rules.replace({None:'any'},inplace=True)
-        rollback_acp.replace({None:'any'},inplace=True)
         # collapse FW rules by zone
         grouped_rules = acp_rules.groupby(['src_z','dst_z'])
         gpl = grouped_rules.size()[grouped_rules.size() > 0].index.values.tolist()
         collapsed_rules = []
         for grules in gpl:
             grules = grouped_rules.get_group(grules)
-            # group frame attributes
-            agg_src_net = []
-            for i in grules['source'].tolist():
-                if isinstance(i, (list, tuple)):
-                    for itr in i:
-                        agg_src_net.append(itr)
-                else:
-                    agg_src_net.append(i)
-            agg_dst_net = []
-            for i in grules['destination'].tolist():
-                if isinstance(i, (list, tuple)):
-                    for itr in i:
-                        agg_dst_net.append(itr)
-                else:
-                    agg_dst_net.append(i)
-            agg_port = []
-            for i in grules['port'].tolist():
-                if isinstance(i, (list, tuple)):
-                    for itr in i:
-                        agg_port.append(itr)
-                else:
-                    agg_port.append(i)
-            agg_src_net = sorted(list(set(agg_src_net)))
-            agg_dst_net = sorted(list(set(agg_dst_net)))
-            agg_port = sorted(list(set(agg_port)))
-            group = grules.iloc[0]
-            # dont take list items if the list only has 1 element
-            group['source_network'] = agg_src_net if len(agg_src_net) > 1 else agg_src_net[0]
-            group['destination_network'] = agg_dst_net if len(agg_dst_net) > 1 else agg_dst_net[0]
-            group['port'] = agg_port if len(agg_port) > 1 else agg_port[0]
-            collapsed_rules.append(group.to_dict())
-        collapsed_rules = pd.DataFrame(collapsed_rules) #todo: need to check what is missing in the collapsed pd!
+            # separate rules with "any" values
+            grules_any = grules[(grules['source'] == 'any') | (grules['destination'] == 'any') | (grules['port'] == 'any')]
+            grules = grules[(grules['source'] != 'any') & (grules['destination'] != 'any') & (grules['port'] != 'any')]
+            for sep_rules in [grules_any,grules]:
+                if not sep_rules.empty:
+                    # group frame attributes
+                    agg_src_net = []
+                    for i in sep_rules['source'].tolist():
+                        if isinstance(i, (list, tuple)):
+                            for itr in i:
+                                agg_src_net.append(itr)
+                        else:
+                            agg_src_net.append(i)
+                    agg_dst_net = []
+                    for i in sep_rules['destination'].tolist():
+                        if isinstance(i, (list, tuple)):
+                            for itr in i:
+                                agg_dst_net.append(itr)
+                        else:
+                            agg_dst_net.append(i)
+                    agg_port = []
+                    for i in sep_rules['port'].tolist():
+                        if isinstance(i, (list, tuple)):
+                            for itr in i:
+                                agg_port.append(itr)
+                        else:
+                            agg_port.append(i)
+                    agg_src_net = sorted(list(set(agg_src_net)))
+                    agg_dst_net = sorted(list(set(agg_dst_net)))
+                    agg_port = sorted(list(set(agg_port)))
+                    group = sep_rules.iloc[0]
+                    # dont take list items if the list only has 1 element
+                    group['source_network'] = agg_src_net if len(agg_src_net) > 1 else agg_src_net[0]
+                    group['destination_network'] = agg_dst_net if len(agg_dst_net) > 1 else agg_dst_net[0]
+                    group['port'] = agg_port if len(agg_port) > 1 else agg_port[0]
+                    collapsed_rules.append(group.to_dict())
+        collapsed_rules = pd.DataFrame(collapsed_rules)
         # remove tuples from multi-zoned rows
-        for col in collapsed_rules.columns:
-            collapsed_rules[col] = collapsed_rules[col].apply(lambda x: list(v for v in x) if isinstance(x, tuple) else x)
+        for rule_pd in [collapsed_rules,acp_rules]:
+            for col in rule_pd.columns:
+                rule_pd[col] = rule_pd[col].apply(lambda x: list(v for v in x) if isinstance(x, tuple) else x)
 
         collapsed_rules.rename(columns={'src_z':'source_zone','dst_z':'destination_zone'},inplace=True)
         collapsed_rules.drop(columns=['policy_name','source','destination'],inplace=True)
@@ -179,7 +185,7 @@ class FireBroom(FireStick):
         # send new rules
         self.deploy_rules(collapsed_rules,acp_id)
         # test if deploy matches original
-        self.ippp = rollback_acp.copy()
+        self.ippp = acp_rules.copy()
         self.ippp.rename(columns={'src_z': 'source_zone', 'dst_z': 'destination_zone', 'source': 'source_network', 'destination': 'destination_network'}, inplace=True)
         rules_present = FireCheck(self).compare_ippp_acp(fix_ippp=False)
         if not rules_present:
@@ -187,13 +193,13 @@ class FireBroom(FireStick):
             # delete collapsed wrong rules
             self.del_fmc_objects(type_='rule', obj_type='all')
             # reinstall old ones
-            self.rollback_acp_op(rollback_acp, acp_id, comment=comment)
+            self.rollback_acp_op(acp_rules, acp_id, comment=comment)
         else:
             self.del_fmc_objects(type_='port',obj_type='all')
             self.del_fmc_objects(type_='network',obj_type='all')
             self.logfmc.warning(f'completed firewall cleanup for ***{self.rule_prepend_name}***')
         # move old temp to archive
-        archive_dir = self.utils.create_file_path('archive', f'rollback_rules_{dt_now}.{save_ext}')
+        archive_dir = self.utils.create_file_path('archive', recovery_fname)
         replace(recovery_loc,archive_dir)
 
     def rollback_acp_op(self,rollback_pd,acp_id,comment:str=False):

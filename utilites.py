@@ -2,11 +2,8 @@ from gzip import open as gzopen
 import logging
 from functools import wraps
 from json import load, dump
-from logging import warning
 from logging.handlers import TimedRotatingFileHandler
 from os import path, makedirs, replace,rename, remove,walk
-
-
 import pandas as pd
 
 TOP_DIR = path.dirname(path.abspath(__file__))
@@ -91,12 +88,13 @@ class Util:
 
     @staticmethod
     def permission_check(deploy_msg:str):
+        logc = log_collector()
         if not isinstance(deploy_msg,str):
             raise ValueError(f'deploy_msg value is not type str. you passed an {type(deploy_msg)} object')
 
         warn_msg = f'{deploy_msg}.\nENTER c TO CONTINUE'
         while True:
-            warning(warn_msg)
+            logc.warning(warn_msg)
             user_input = input()
             if user_input.lower() == 'c':
                 break
@@ -141,7 +139,6 @@ class Util:
         dir_path = path.join(TOP_DIR, folder)
         _, _, filenames = next(walk(dir_path))
         return [path.join(dir_path, file) for file in filenames if file.endswith(look_for_ext)]
-
 
 def deprecated(func):
     fname = func.__name__

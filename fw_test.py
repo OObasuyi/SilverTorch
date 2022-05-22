@@ -7,6 +7,7 @@ class FireCheck:
     def __init__(self,af_class):
         self.copy_class = af_class
         self.logfmc = self.copy_class.logfmc
+
     def _fix_ippp_data(self):
         self.copy_class.zbr_bypass_check()
         test_ippp = self.copy_class.ippp[['source', 'destination', 'protocol', 'port']]
@@ -73,7 +74,7 @@ class FireCheck:
                 test_dst_z = test_rule['destination_zone']
                 test_port = test_rule['port']
 
-                for idx, test_item in enumerate([test_dst_ip,test_src_ip, test_src_z ,test_dst_z ,test_port]):
+                for idx, test_item in enumerate([test_dst_ip,test_src_ip, test_src_z ,test_dst_z,test_port]):
                     if not isinstance(test_item,list):
                         test_item = [test_item]
 
@@ -100,6 +101,8 @@ class FireCheck:
                                             breakout = True
                                             break
                                     except Exception as error:
+                                        if ci == 'any':
+                                            match_found += 1
                                         self.logfmc.debug(error)
 
                                 elif i == ci:
@@ -118,6 +121,8 @@ class FireCheck:
                                             sub_match_found +=1
                                             break
                                     except Exception as error:
+                                        if ci == 'any':
+                                            sub_match_found += 1
                                         self.logfmc.debug(error)
                                 elif i == ci:
                                     sub_match_found += 1
@@ -130,9 +135,11 @@ class FireCheck:
 
                 if match_found >= 5:
                     found_in_policy.append(ti)
-        self.logfmc.warning(f'Found {len(found_in_policy)} of {len(test_ippp)} from IPPP implemented in ACP')
+        self.logfmc.warning(f'Found {len(found_in_policy) if len(found_in_policy) <= len(test_ippp) else len(test_ippp)} of {len(test_ippp)} from IPPP implemented in ACP')
         # gather rules not seen in ACP from IPPP
-        if len(found_in_policy) != len(test_ippp):
+        #  there might be a case where found_in_policy > test_ippp due to possible "any" redundant or preempt rules in the ACP.
+        #  such as RULE1: x.x.x.1 > x.x.x.2 over 9000 and RULE2: any > x.x.x.2 over 9000 with the same other info would cause this to happen
+        if len(found_in_policy) < len(test_ippp):
             dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
             not_found_rules = self.copy_class.utils.create_file_path(folder='404_rules',file_name=f'{self.copy_class.rule_prepend_name}_orphaned_rules_{dt_now}.csv')
             test_ippp.drop(found_in_policy,inplace=True)
