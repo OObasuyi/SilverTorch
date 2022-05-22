@@ -32,9 +32,9 @@ def terminal_entry():
                    zone_of_last_resort=args.zolr, same_cred=args.same_creds, ruleset_type=args.ruleset_type)
 
     if args.ippp_checkup:
-        fm.policy_manipulation_flow(checkup=True)
+        fm.policy_deployment_flow(checkup=True)
     else:
-        fm.policy_manipulation_flow()
+        fm.policy_deployment_flow()
 
 
 if __name__ == "__main__":

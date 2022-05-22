@@ -35,7 +35,7 @@ augWork = FireStick(ippp_location='ippp_rel4.csv', access_policy='acp', ftd_host
                     rule_prepend_name='zoom_rules', zone_of_last_resort='outside_zone', same_cred=True)
 
 # starts workflow
-augWork.policy_manipulation_flow()
+augWork.policy_deployment_flow()
 ```
 ### Command line interface
 ```console

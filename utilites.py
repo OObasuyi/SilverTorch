@@ -1,7 +1,11 @@
+from gzip import open as gzopen
+import logging
 from functools import wraps
 from json import load, dump
 from logging import warning
+from logging.handlers import TimedRotatingFileHandler
 from os import path, makedirs, replace
+from os import rename, remove
 
 import pandas as pd
 
@@ -136,8 +140,42 @@ def deprecated(func):
 
     @wraps(func)
     def wrapper(*args):
-        warning(f'the {fname} function is deprecated and will be removed in future releases')
+        log_collector().warning(f'the {fname} function is deprecated and will be removed in future releases')
         return func(*args)
     return wrapper
 
 
+def log_collector(log_all=False):
+    fName = Util().create_file_path('logs', 'firepyower.log')
+
+    if not log_all:
+        logger = logging.getLogger(__name__)
+    else:
+        logger = logging.getLogger()
+
+    logger.setLevel(logging.DEBUG)
+
+    conHandler = logging.StreamHandler()
+    conHandler.setLevel(logging.WARN)
+    logformatCon = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt='%d-%b-%y %H:%M:%S')
+    conHandler.setFormatter(logformatCon)
+    logger.addHandler(conHandler)
+
+    fileHandler = TimedRotatingFileHandler(filename=fName, when='midnight', backupCount=90, interval=1)
+    fileHandler.setLevel(logging.DEBUG)
+    logformatfile = logging.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s', datefmt='%d-%b-%y %H:%M:%S')
+    fileHandler.setFormatter(logformatfile)
+    fileHandler.rotator = GZipRotator()
+    logger.addHandler(fileHandler)
+    return logger
+
+
+class GZipRotator:
+    def __call__(self, source, dest):
+        rename(source, dest)
+        f_in = open(dest, 'rb')
+        f_out = gzopen("{}.gz".format(dest), 'wb')
+        f_out.writelines(f_in)
+        f_out.close()
+        f_in.close()
+        remove(dest)

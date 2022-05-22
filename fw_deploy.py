@@ -10,9 +10,8 @@ from fireREST import FMC
 from netmiko import ConnectHandler
 from tqdm import tqdm
 
-from fw_logging import LogCollector
-from test_run import FireCheck
-from utilites import Util, deprecated
+from fw_test import FireCheck
+from utilites import Util, deprecated,log_collector
 
 pd.options.display.max_columns = None
 pd.options.display.max_rows = None
@@ -61,14 +60,14 @@ class FireStick:
         self.rule_prepend_name = rule_prepend_name
         self.zone_of_last_resort = zone_of_last_resort
         self.ruleset_type = ruleset_type.upper()
-        self.logfmc = LogCollector()
+        self.logfmc = log_collector()
 
     def _creation_check(self, response, new_obj, output=True):
         if response.status_code != 201:
             raise Exception(f'received back status code:{response.status_code}')
         else:
             if output:
-                self.logfmc.logger.warning(f'new obj {new_obj} created ')
+                self.logfmc.warning(f'new obj {new_obj} created ')
 
     def rest_connection(self, reset=False):
         if reset:
@@ -133,7 +132,7 @@ class FireStick:
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
         fpath = self.utils.create_file_path('CNI', f'non_applicable_protocols_{dt_now}.csv')
         if not na_protos.empty:
-            self.logfmc.logger.warning(f'found protocols that cannot be used with this script\n Please enter them manually\n file location: {fpath}')
+            self.logfmc.warning(f'found protocols that cannot be used with this script\n Please enter them manually\n file location: {fpath}')
             # make sure the user sees the msg with no input.
             sleep(2)
             na_protos.to_csv(fpath, index=False)
@@ -207,12 +206,12 @@ class FireStick:
                 try:
                     self.fmc.object.network.create(data=net_list)
                 except Exception as error:
-                    self.logfmc.logger.debug(error)
+                    self.logfmc.debug(error)
 
                 try:
                     self.fmc.object.host.create(data=host_list)
                 except Exception as error:
-                    self.logfmc.logger.debug(error)
+                    self.logfmc.debug(error)
             else:
                 if not install_pd.empty:
                     group_port = install_pd.groupby(['port', 'protocol'])
@@ -234,7 +233,7 @@ class FireStick:
                     try:
                         self.fmc.object.protocolportobject.create(data=port_list)
                     except Exception as error:
-                        self.logfmc.logger.debug(error)
+                        self.logfmc.debug(error)
 
     def zone_to_ip_information(self):
         route_zone_info = []
@@ -297,7 +296,7 @@ class FireStick:
             sorted(item_holder)
             return item_holder
         except Exception as error:
-            self.logfmc.logger.debug(error)
+            self.logfmc.debug(error)
             return None
 
     def fdp_grouper(self,p, type_):
@@ -333,15 +332,15 @@ class FireStick:
         current_ruleset = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_set['id'])
         current_ruleset = self.utils.transform_acp(current_ruleset,self)
         if len(current_ruleset) < 1:
-            self.logfmc.logger.error('nothing in current ruleset')
+            self.logfmc.error('nothing in current ruleset')
             return ruleset
 
-        self.logfmc.logger.warning("getting real IPs from named network objects")
+        self.logfmc.warning("getting real IPs from named network objects")
         for ip in ['source', 'destination']:
             current_ruleset[f'real_{ip}'] = current_ruleset[ip].apply(lambda p: self.fdp_grouper(p, 'ip'))
             ruleset[f'real_{ip}'] = ruleset[f'{ip}_network'].apply(lambda p: self.fdp_grouper(p, 'ip'))
 
-        self.logfmc.logger.warning("getting real ports-protocols from named port objects")
+        self.logfmc.warning("getting real ports-protocols from named port objects")
         current_ruleset['real_port'] = current_ruleset['port'].apply(lambda p: self.fdp_grouper(p, 'port'))
         ruleset['real_port'] = ruleset['port'].apply(lambda p: self.fdp_grouper(p, 'port'))
 
@@ -421,7 +420,7 @@ class FireStick:
         try:
             ruleset.drop(idx_collector, inplace=True)
             ruleset.reset_index(inplace=True, drop=True)
-            self.logfmc.logger.warning(f"{'#' * 3}DROP {len(idx_collector)} DUP RULES{'#' * 3}")
+            self.logfmc.warning(f"{'#' * 3}DROP {len(idx_collector)} DUP RULES{'#' * 3}")
         except:
             # no dups to drop
             pass
@@ -462,13 +461,6 @@ class FireStick:
 
     def create_acp_rule(self):
         ruleset = []
-
-        def fix_object(x):
-            try:
-                x = x[0]
-            except:
-                x = x
-            return [{'name': x['name'], 'id': x['id'], 'type': x['type']}]
         self.zbr_bypass_check()
         # sort rules in a pretty format
         for i in self.ippp.index:
@@ -554,7 +546,7 @@ class FireStick:
         # since we grouped policy find the dups again and get rid of em
         ruleset = self.find_dup_policies(ruleset, acp_set)
         if ruleset.empty:
-            self.logfmc.logger.warning('NO RULES TO DEPLOY')
+            self.logfmc.warning('NO RULES TO DEPLOY')
             return
 
         # real cols are for function lookup use
@@ -564,6 +556,15 @@ class FireStick:
         ruleset_loc = self.utils.create_file_path('predeploy_rules', f"fmc_ruleset_preload_configs_{dt_now}.csv", )
         ruleset.to_csv(ruleset_loc, index=False)
         self.utils.permission_check(f'REVIEW PRE-DEPLOY RULESET FILE located at {ruleset_loc}')
+        return ruleset,acp_set
+
+    def deploy_rules(self,new_rules,current_acp_rules):
+        def fix_object(x):
+            try:
+                x = x[0]
+            except:
+                x = x
+            return [{'name': x['name'], 'id': x['id'], 'type': x['type']}]
 
         temp_form = {
             "action": self.ruleset_type, "enabled": 'true', "type": "AccessRule",
@@ -578,8 +579,8 @@ class FireStick:
         take_num = 1
         cgj_num = take_num
         cgp_num = take_num
-        for i in tqdm(ruleset.index, desc='Loading bulk rule collection artifacts', total=len(ruleset.index), colour='green'):
-            rule = ruleset.loc[i].to_dict()
+        for i in tqdm(new_rules.index, desc='Loading bulk rule collection artifacts', total=len(new_rules.index), colour='green'):
+            rule = new_rules.loc[i].to_dict()
             dh = {}
             for k, v in rule.items():
                 if isinstance(v, str):
@@ -593,6 +594,7 @@ class FireStick:
                             # any is coming as list so lets strip it just in case this is due to how the policy lookup occurred
                             v = 'any'
                     else:
+                        # avoid rate limiting
                         sleep(5)
                         # get new port/net info per iteration so we dont create dup objects that have the same child IDs on creation if needed
                         self.fmc_net_port_info()
@@ -618,7 +620,7 @@ class FireStick:
                                                     self._creation_check(response, create_group_obj['name'], output=False)
                                             v = create_group_obj['name']
                                         except Exception as error:
-                                            self.logfmc.logger.error(error)
+                                            self.logfmc.error(error)
                                     matched = True
 
                             elif 'port' in k:
@@ -641,7 +643,7 @@ class FireStick:
                                                     self._creation_check(response, create_group_obj['name'], output=False)
                                             v = create_group_obj['name']
                                         except Exception as error:
-                                            self.logfmc.logger.error(error)
+                                            self.logfmc.error(error)
                                     matched = True
                 dh[k] = v
             rule = dh
@@ -688,13 +690,15 @@ class FireStick:
             charity_policy.append(rule_form)
 
         try:
-            res = self.fmc.policy.accesspolicy.accessrule.create(data=charity_policy, container_uuid=acp_set['id'], category='automation_engine', )
+            res = self.fmc.policy.accesspolicy.accessrule.create(data=charity_policy, container_uuid=current_acp_rules['id'], category='automation_engine', )
             self._creation_check(res, charity_policy)
-            self.logfmc.logger.warning(f'{"#" * 5}RULES PUSHED SUCCESSFULLY{"#" * 5}')
+            self.logfmc.warning(f'{"#" * 5}RULES PUSHED SUCCESSFULLY{"#" * 5}')
+            return True
         except Exception as error:
-            self.logfmc.logger.error(error)
+            self.logfmc.error(error)
+            return False
 
-    def policy_manipulation_flow(self,checkup=False):
+    def policy_deployment_flow(self,checkup=False):
         # login FMC
         self.rest_connection()
         # Get zone info first via ClI
@@ -707,15 +711,21 @@ class FireStick:
         self.ippp = self.retrieve_ippp()
         # create FMC objects
         self.create_fmc_object_names()
-        # restart conn??
+        # restart conn
         self.rest_connection(reset=True)
+        ffc = FireCheck(self)
         if checkup:
-            FireCheck(self).compare_ipp_acp()
+            ffc.compare_ippp_acp()
         else:
             # create FMC rules
-            self.create_acp_rule()
-            # test rule Checkup
-            FireCheck(self).compare_ipp_acp()
+            ruleset,acp_set = self.create_acp_rule()
+            # deploy rules
+            successful = self.deploy_rules(new_rules=ruleset,current_acp_rules=acp_set)
+            if successful:
+                # test rule Checkup
+                ffc.compare_ippp_acp()
+            else:
+                raise Exception('An error occured while processing the rules')
 
     @staticmethod
     @deprecated
@@ -743,9 +753,10 @@ class FireStick:
 
 
 # todo: need to test run again since we change how ACP looks like
+
 if __name__ == "__main__":
     augWork = FireStick(ippp_location='gfrs.csv', access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone', same_cred=False, cred_file='cF.json')
-    augWork.policy_manipulation_flow()
+    augWork.policy_deployment_flow()
     # augWork.rest_connection()
     # augWork.del_fmc_objects(type_='port',where='all',obj_type='all')
     # augWork.del_fmc_objects(type_='network',where='all',obj_type='all')

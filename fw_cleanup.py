@@ -2,10 +2,17 @@ from fw_deploy import FireStick
 from tqdm import tqdm
 import pandas as pd
 
+from fw_test import FireCheck
+
+
 class FireBroom(FireStick):
-    def __init__(self, fmc_host: str, ftd_host: str, access_policy: str, rule_prepend_name: str, zone_of_last_resort: str, same_cred=False, cred_file='cF.json'):
+    def __init__(self, fmc_host: str, ftd_host: str, access_policy: str, rule_prepend_name: str,
+            zone_of_last_resort: str, same_cred=False, ruleset_type='ALLOW',domain='Global'):
         ippp_location = None
-        super().__init__(fmc_host, ftd_host, ippp_location, access_policy, rule_prepend_name, zone_of_last_resort,same_cred=same_cred, cred_file=cred_file)
+        # todo: testing
+        cred_file = 'cF.json'
+        super().__init__(fmc_host, ftd_host, ippp_location, access_policy, rule_prepend_name,
+                         zone_of_last_resort,same_cred=same_cred, cred_file=cred_file,ruleset_type=ruleset_type,domain=domain)
         self.rest_connection()
 
     def rule_objects(self):
@@ -30,7 +37,7 @@ class FireBroom(FireStick):
                         else:
                             self.fmc.object.host.delete(obj_id)
                     except Exception as error:
-                        self.logfmc.logger.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
+                        self.logfmc.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
 
             def net_port_delete():
                 del_list = [i[2] for i in self.net_group_object if self.rule_prepend_name in i[0]] if self.rule_prepend_name != 'all' else [i[2] for i in self.net_group_object]
@@ -38,7 +45,7 @@ class FireBroom(FireStick):
                     try:
                         self.fmc.object.networkgroup.delete(obj_id)
                     except Exception as error:
-                        self.logfmc.logger.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
+                        self.logfmc.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
 
             if obj_type == 'net':
                 net_delete()
@@ -55,7 +62,7 @@ class FireBroom(FireStick):
                     try:
                         self.fmc.object.protocolportobject.delete(obj_id)
                     except Exception as error:
-                        self.logfmc.logger.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
+                        self.logfmc.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
 
             def del_port_group():
                 del_list = [i[2] for i in self.port_group_object if self.rule_prepend_name in i[0]] if self.rule_prepend_name != 'all' else [i[2] for i in self.port_group_object]
@@ -63,7 +70,7 @@ class FireBroom(FireStick):
                     try:
                         self.fmc.object.portobjectgroup.delete(obj_id)
                     except Exception as error:
-                        self.logfmc.logger.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
+                        self.logfmc.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
 
             if obj_type == 'port':
                 del_port()
@@ -80,16 +87,25 @@ class FireBroom(FireStick):
                 try:
                     self.fmc.policy.accesspolicy.accessrule.delete(container_uuid=acp_id['id'], name=obj_id)
                 except Exception as error:
-                    self.logfmc.logger.error(f'Cannot delete {obj_id} from set {self.rule_prepend_name} for rules \n received code: {error}')
+                    self.logfmc.error(f'Cannot delete {obj_id} from set {self.rule_prepend_name} for rules \n received code: {error}')
         else:
             raise NotImplementedError(f'type_ not found please select rule, port, or network. you passed {type_}')
 
-    def collapse_fmc_rules(self):
+    def collapse_fmc_rules(self,comment:str=False):
         acp_id, acp_rules = self.rule_objects()
+        self.fmc_net_port_info()
         acp_rules = self.utils.transform_acp(acp_rules, self)
         acp_rules = acp_rules[acp_rules['policy_name'].str.startswith(self.rule_prepend_name)]
+        # no rule test
+        if acp_rules.empty:
+            raise Exception(f'rules starting with {self.rule_prepend_name} was not found!')
+        # in case we fail our rule test
+        rollback_acp = acp_rules.copy()
         for col in acp_rules.columns:
             acp_rules[col] = acp_rules[col].apply(lambda x: tuple(v for v in x) if isinstance(x, list) else x)
+        # fill in vals that are really any
+        acp_rules.replace({None:'any'},inplace=True)
+        rollback_acp.replace({None:'any'},inplace=True)
         # collapse FW rules by zone
         grouped_rules = acp_rules.groupby(['src_z','dst_z'])
         gpl = grouped_rules.size()[grouped_rules.size() > 0].index.values.tolist()
@@ -123,37 +139,50 @@ class FireBroom(FireStick):
             agg_port = sorted(list(set(agg_port)))
             group = grules.iloc[0]
             # dont take list items if the list only has 1 element
-            group['source'] = agg_src_net if len(agg_src_net) > 1 else agg_src_net[0]
-            group['destination'] = agg_dst_net if len(agg_dst_net) > 1 else agg_dst_net[0]
+            group['source_network'] = agg_src_net if len(agg_src_net) > 1 else agg_src_net[0]
+            group['destination_network'] = agg_dst_net if len(agg_dst_net) > 1 else agg_dst_net[0]
             group['port'] = agg_port if len(agg_port) > 1 else agg_port[0]
-            # dup policy check
-            dup_seen = False
-            for rule_group in collapsed_rules:
-                if group.to_dict() == rule_group:
-                    dup_seen = True
-                    break
-            if not dup_seen:
-                collapsed_rules.append(group.to_dict())
-        ruleset = pd.DataFrame(collapsed_rules)
-
+            collapsed_rules.append(group.to_dict())
+        collapsed_rules = pd.DataFrame(collapsed_rules)
         # remove tuples from multi-zoned rows
-        for col in ruleset.columns:
-            ruleset[col] = ruleset[col].apply(lambda x: list(v for v in x) if isinstance(x, tuple) else x)
+        for col in collapsed_rules.columns:
+            collapsed_rules[col] = collapsed_rules[col].apply(lambda x: list(v for v in x) if isinstance(x, tuple) else x)
 
-        if ruleset.empty:
-            self.logfmc.logger.warning('NO RULES TO DEPLOY')
-            return
+        collapsed_rules.rename(columns={'src_z':'source_zone','dst_z':'destination_zone'},inplace=True)
+        collapsed_rules.drop(columns=['policy_name','source','destination'],inplace=True)
+        if comment:
+            collapsed_rules['comment'] = comment
+        # Delete old rules
+        self.del_fmc_objects(type_='rule',obj_type='all')
+        # send new rules
+        self.deploy_rules(collapsed_rules,acp_id)
+        # test if deploy matches original
+        self.ippp = rollback_acp.copy()
+        self.ippp.rename(columns={'src_z': 'source_zone', 'dst_z': 'destination_zone', 'source': 'source_network', 'destination': 'destination_network'}, inplace=True)
+        rules_present = FireCheck(self).compare_ippp_acp(fix_ippp=False)
+        if not rules_present:
+            self.logfmc.critical('UNROLLED RULES NOT PRESENT IN COLLAPSED RULE SET. ROLLING BACK!')
+            # delete collapsed wrong rules
+            self.del_fmc_objects(type_='rule', obj_type='all')
+            # reinstall old ones
+            self.rollback_acp_op(rollback_acp, acp_id, comment=comment)
+        else:
+            self.del_fmc_objects(type_='port',obj_type='all')
+            self.del_fmc_objects(type_='network',obj_type='all')
+            self.logfmc.warning(f'completed firewall cleanup for ***{self.rule_prepend_name}***')
 
-        pass
-
-
-
+    def rollback_acp_op(self,rollback_pd,acp_id,comment:str=False):
+        rollback_pd.rename(columns={'src_z': 'source_zone', 'dst_z': 'destination_zone','source': 'source_network', 'destination': 'destination_network'}, inplace=True)
+        rollback_pd.drop(columns=['policy_name'], inplace=True)
+        if comment:
+            rollback_pd['comment'] = comment
+        self.deploy_rules(rollback_pd, acp_id)
 
 
 
 if __name__ == "__main__":
     weeper = FireBroom(access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone')
-    weeper.collapse_fmc_rules()
-    # augWork.del_fmc_objects(type_='port',self.rule_prepend_name='all',obj_type='all')
-    # augWork.del_fmc_objects(type_='network',self.rule_prepend_name='all',obj_type='all')
-    # augWork.del_fmc_objects(type_='network',self.rule_prepend_name='all',obj_type='all')
+    weeper.collapse_fmc_rules(comment='tester123')
+    # augWork.del_fmc_objects(type_='port',obj_type='all')
+    # augWork.del_fmc_objects(type_='network',,obj_type='all')
+    # augWork.del_fmc_objects(type_='network',obj_type='all')
