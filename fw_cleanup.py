@@ -165,7 +165,7 @@ class FireBroom(FireStick):
             group['destination_network'] = agg_dst_net if len(agg_dst_net) > 1 else agg_dst_net[0]
             group['port'] = agg_port if len(agg_port) > 1 else agg_port[0]
             collapsed_rules.append(group.to_dict())
-        collapsed_rules = pd.DataFrame(collapsed_rules)
+        collapsed_rules = pd.DataFrame(collapsed_rules) #todo: need to check what is missing in the collapsed pd!
         # remove tuples from multi-zoned rows
         for col in collapsed_rules.columns:
             collapsed_rules[col] = collapsed_rules[col].apply(lambda x: list(v for v in x) if isinstance(x, tuple) else x)
@@ -192,9 +192,9 @@ class FireBroom(FireStick):
             self.del_fmc_objects(type_='port',obj_type='all')
             self.del_fmc_objects(type_='network',obj_type='all')
             self.logfmc.warning(f'completed firewall cleanup for ***{self.rule_prepend_name}***')
-            # move old temp to archive
-            archive_dir = self.utils.create_file_path('archive', f'rollback_rules_{dt_now}.{save_ext}')
-            replace(recovery_loc,archive_dir)
+        # move old temp to archive
+        archive_dir = self.utils.create_file_path('archive', f'rollback_rules_{dt_now}.{save_ext}')
+        replace(recovery_loc,archive_dir)
 
     def rollback_acp_op(self,rollback_pd,acp_id,comment:str=False):
         rollback_pd.rename(columns={'src_z': 'source_zone', 'dst_z': 'destination_zone','source': 'source_network', 'destination': 'destination_network'}, inplace=True)
@@ -205,7 +205,7 @@ class FireBroom(FireStick):
 
 
 if __name__ == "__main__":
-    weeper = FireBroom(access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone')
+    weeper = FireBroom(access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_1', zone_of_last_resort='outside_zone')
     weeper.collapse_fmc_rules(comment='tester123')
     # augWork.del_fmc_objects(type_='port',obj_type='all')
     # augWork.del_fmc_objects(type_='network',,obj_type='all')

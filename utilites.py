@@ -145,10 +145,11 @@ class Util:
 
 def deprecated(func):
     fname = func.__name__
+    logc = log_collector()
 
     @wraps(func)
     def wrapper(*args):
-        log_collector().warning(f'the {fname} function is deprecated and will be removed in future releases')
+        logc.warning(f'the {fname} function is deprecated and will be removed in future releases')
         return func(*args)
     return wrapper
 
