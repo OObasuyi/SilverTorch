@@ -1,11 +1,15 @@
-from logging import warning
-import pandas as pd
-from os import path,makedirs,replace
-from json import load,dump
+from gzip import open as gzopen
+import logging
 from functools import wraps
+from json import load, dump
+from logging.handlers import TimedRotatingFileHandler
+from os import path, makedirs, replace,rename, remove,walk
+import pandas as pd
+
+TOP_DIR = path.dirname(path.abspath(__file__))
 
 
-class util:
+class Util:
 
     @staticmethod
     def csv_to_dict(csv_file) -> dict:
@@ -22,21 +26,21 @@ class util:
 
     @staticmethod
     def create_file_path(folder:str,file_name:str):
-        top_dir = path.dirname(path.abspath(__file__))
-        allowed_exts = ['csv','log','txt','json']
+        TOP_DIR = path.dirname(path.abspath(__file__))
+        allowed_exts = ['csv','log','txt','json','rulbk']
 
         input_ext = '.'.join(file_name.split(".")[1:])
         if input_ext.lower() not in allowed_exts:
             raise ValueError(f'please ensure you using one of the allowed file types you gave {input_ext}')
 
-        fName = f'{top_dir}/{folder}/{file_name}'
-        if not path.exists(f'{top_dir}/{folder}'):
-            makedirs(f'{top_dir}/{folder}')
+        fName = f'{TOP_DIR}/{folder}/{file_name}'
+        if not path.exists(f'{TOP_DIR}/{folder}'):
+            makedirs(f'{TOP_DIR}/{folder}')
 
         # move file to correct dir if needed
         if not path.exists(fName):
             try:
-                replace(f'{top_dir}/{file_name}',fName)
+                replace(f'{TOP_DIR}/{file_name}',fName)
             except:
                 # file has yet to be created or not in top path
                 pass
@@ -84,12 +88,13 @@ class util:
 
     @staticmethod
     def permission_check(deploy_msg:str):
+        logc = log_collector()
         if not isinstance(deploy_msg,str):
             raise ValueError(f'deploy_msg value is not type str. you passed an {type(deploy_msg)} object')
 
         warn_msg = f'{deploy_msg}.\nENTER c TO CONTINUE'
         while True:
-            warning(warn_msg)
+            logc.warning(warn_msg)
             user_input = input()
             if user_input.lower() == 'c':
                 break
@@ -115,26 +120,70 @@ class util:
             new_changes.to_csv(f_name,index=False)
 
     @staticmethod
-    def transform_acp(current_ruleset,self_object):
+    def transform_acp(current_ruleset,self_instance):
         changed_ruleset = []
         for i in current_ruleset:
             subset_rule = {}
-            subset_rule['src_z'] = self_object.find_nested_group_objects(i.get('sourceZones'))
-            subset_rule['dst_z'] = self_object.find_nested_group_objects(i.get('destinationZones'))
-            subset_rule['source'] = self_object.find_nested_group_objects(i.get('sourceNetworks'))
-            subset_rule['destination'] = self_object.find_nested_group_objects(i.get('destinationNetworks'))
-            subset_rule['port'] = self_object.find_nested_group_objects(i.get('destinationPorts'))
+            subset_rule['policy_name'] = i.get('name')
+            subset_rule['src_z'] = self_instance.find_nested_group_objects(i.get('sourceZones'))
+            subset_rule['dst_z'] = self_instance.find_nested_group_objects(i.get('destinationZones'))
+            subset_rule['source'] = self_instance.find_nested_group_objects(i.get('sourceNetworks'))
+            subset_rule['destination'] = self_instance.find_nested_group_objects(i.get('destinationNetworks'))
+            subset_rule['port'] = self_instance.find_nested_group_objects(i.get('destinationPorts'))
             changed_ruleset.append(subset_rule)
         current_ruleset = changed_ruleset
         return pd.DataFrame(current_ruleset)
 
+    @staticmethod
+    def get_files_from_dir(folder,look_for_ext):
+        dir_path = path.join(TOP_DIR, folder)
+        _, _, filenames = next(walk(dir_path))
+        return [path.join(dir_path, file) for file in filenames if file.endswith(look_for_ext)]
 
 def deprecated(func):
     fname = func.__name__
+    logc = log_collector()
 
     @wraps(func)
     def wrapper(*args):
-        warning(f'the {fname} function is deprecated and will be removed in future releases')
+        logc.warning(f'the {fname} function is deprecated and will be removed in future releases')
         return func(*args)
     return wrapper
 
+
+def log_collector(log_all=False):
+    fName = Util().create_file_path('logs', 'firepyower.log')
+
+    if not log_all:
+        logger = logging.getLogger('SilverTorch')
+    else:
+        logger = logging.getLogger()
+
+    logger.setLevel(logging.DEBUG)
+    if logger.hasHandlers():
+        logger.handlers = []
+
+    conHandler = logging.StreamHandler()
+    conHandler.setLevel(logging.WARN)
+    logformatCon = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt='%d-%b-%y %H:%M:%S')
+    conHandler.setFormatter(logformatCon)
+    logger.addHandler(conHandler)
+
+    fileHandler = TimedRotatingFileHandler(filename=fName, when='midnight', backupCount=90, interval=1)
+    fileHandler.setLevel(logging.DEBUG)
+    logformatfile = logging.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s', datefmt='%d-%b-%y %H:%M:%S')
+    fileHandler.setFormatter(logformatfile)
+    fileHandler.rotator = GZipRotator()
+    logger.addHandler(fileHandler)
+    return logger
+
+
+class GZipRotator:
+    def __call__(self, source, dest):
+        rename(source, dest)
+        f_in = open(dest, 'rb')
+        f_out = gzopen("{}.gz".format(dest), 'wb')
+        f_out.writelines(f_in)
+        f_out.close()
+        f_in.close()
+        remove(dest)

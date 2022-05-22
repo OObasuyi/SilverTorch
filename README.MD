@@ -28,13 +28,14 @@ OObasuyi/paramiko (for FIPS compliance)
 ### Calling function directly from *auto_fmc.py*
 
 ```python
-from auto_fmc import AugmentedWorker
+from fw_deploy import FireStick
 
 # will ask for the creds on the terminal
-augWork = AugmentedWorker(ippp_location='ippp_rel4.csv',access_policy='acp',ftd_host='10.11.6.191',fmc_host='10.11.6.60',rule_prepend_name='zoom_rules',zone_of_last_resort='outside_zone',same_cred=True)
+augWork = FireStick(ippp_location='ippp_rel4.csv', access_policy='acp', ftd_host='10.11.6.191', fmc_host='10.11.6.60',
+                    rule_prepend_name='zoom_rules', zone_of_last_resort='outside_zone', same_cred=True)
 
 # starts workflow
-augWork.policy_manipulation_flow()
+augWork.policy_deployment_flow()
 ```
 ### Command line interface
 ```console

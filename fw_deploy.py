@@ -1,25 +1,26 @@
+import json
 from copy import deepcopy
 from datetime import datetime
 from ipaddress import IPv4Network, ip_network
 from re import search, sub
-import json
-from logging_fmc import LogCollector
+from time import sleep
+
 import pandas as pd
 from fireREST import FMC
 from netmiko import ConnectHandler
 from tqdm import tqdm
-from utilites import util,deprecated
-from time import sleep
-from test_run import TestRun
+
+from fw_test import FireCheck
+from utilites import Util, deprecated,log_collector
 
 pd.options.display.max_columns = None
 pd.options.display.max_rows = None
 pd.options.mode.chained_assignment = None
 
 
-class AugmentedWorker:
+class FireStick:
 
-    def __init__(self, fmc_host:str, ftd_host:str,ippp_location:str,
+    def __init__(self, fmc_host:str, ftd_host:str,ippp_location,
             access_policy:str, rule_prepend_name:str,zone_of_last_resort:str,
             zbr_bypass: dict = None,same_cred=True, ruleset_type='ALLOW',
             cred_file: str = None,domain='Global'):
@@ -37,7 +38,7 @@ class AugmentedWorker:
         @@param same_cred: whether all creds to login devices use the same user and password combination
         @@param ruleset_type: rules can only be inserted as all allow or denies
         """
-        self.utils = util()
+        self.utils = Util()
         creds = self.get_device_creds(cred_file=cred_file, same_cred=same_cred)
         # Sec-lint #1
         for v in list(creds.values()):
@@ -50,21 +51,23 @@ class AugmentedWorker:
         self.ftd_username = creds['ftd_username']
         self.ftd_password = creds['ftd_password']
         self.domain = domain
-        # this is just a check the file MUST be the folder
-        self.ippp_location = self.utils.create_file_path('ingestion', ippp_location)
+        # some calls might not need a ippp file
+        if ippp_location is not None:
+            # this is just a check the file MUST be the folder
+            self.ippp_location = self.utils.create_file_path('ingestion', ippp_location)
         self.access_policy = access_policy
         self.zbr_bypass = zbr_bypass
         self.rule_prepend_name = rule_prepend_name
         self.zone_of_last_resort = zone_of_last_resort
         self.ruleset_type = ruleset_type.upper()
-        self.logfmc = LogCollector()
+        self.logfmc = log_collector()
 
     def _creation_check(self, response, new_obj, output=True):
         if response.status_code != 201:
             raise Exception(f'received back status code:{response.status_code}')
         else:
             if output:
-                self.logfmc.logger.warning(f'new obj {new_obj} created ')
+                self.logfmc.warning(f'new obj {new_obj} created ')
 
     def rest_connection(self, reset=False):
         if reset:
@@ -129,7 +132,7 @@ class AugmentedWorker:
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
         fpath = self.utils.create_file_path('CNI', f'non_applicable_protocols_{dt_now}.csv')
         if not na_protos.empty:
-            self.logfmc.logger.warning(f'found protocols that cannot be used with this script\n Please enter them manually\n file location: {fpath}')
+            self.logfmc.warning(f'found protocols that cannot be used with this script\n Please enter them manually\n file location: {fpath}')
             # make sure the user sees the msg with no input.
             sleep(2)
             na_protos.to_csv(fpath, index=False)
@@ -203,12 +206,12 @@ class AugmentedWorker:
                 try:
                     self.fmc.object.network.create(data=net_list)
                 except Exception as error:
-                    self.logfmc.logger.debug(error)
+                    self.logfmc.debug(error)
 
                 try:
                     self.fmc.object.host.create(data=host_list)
                 except Exception as error:
-                    self.logfmc.logger.debug(error)
+                    self.logfmc.debug(error)
             else:
                 if not install_pd.empty:
                     group_port = install_pd.groupby(['port', 'protocol'])
@@ -230,7 +233,7 @@ class AugmentedWorker:
                     try:
                         self.fmc.object.protocolportobject.create(data=port_list)
                     except Exception as error:
-                        self.logfmc.logger.debug(error)
+                        self.logfmc.debug(error)
 
     def zone_to_ip_information(self):
         route_zone_info = []
@@ -293,7 +296,7 @@ class AugmentedWorker:
             sorted(item_holder)
             return item_holder
         except Exception as error:
-            self.logfmc.logger.debug(error)
+            self.logfmc.debug(error)
             return None
 
     def fdp_grouper(self,p, type_):
@@ -312,7 +315,7 @@ class AugmentedWorker:
             else:
                 return sorted(list(set(f"{px[1]}:{px[2]}" for rulep in p for px in self.port_data if rulep == px[0])))
 
-    def find_dup_policies(self, ruleset, acp_set):
+    def find_inter_dup_policies(self, ruleset, acp_set):
         def flatten(d):
             out = {}
             for key, val in d.items():
@@ -329,15 +332,15 @@ class AugmentedWorker:
         current_ruleset = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_set['id'])
         current_ruleset = self.utils.transform_acp(current_ruleset,self)
         if len(current_ruleset) < 1:
-            self.logfmc.logger.error('nothing in current ruleset')
+            self.logfmc.error('nothing in current ruleset')
             return ruleset
 
-        self.logfmc.logger.warning("getting real IPs from named network objects")
+        self.logfmc.warning("getting real IPs from named network objects")
         for ip in ['source', 'destination']:
             current_ruleset[f'real_{ip}'] = current_ruleset[ip].apply(lambda p: self.fdp_grouper(p, 'ip'))
             ruleset[f'real_{ip}'] = ruleset[f'{ip}_network'].apply(lambda p: self.fdp_grouper(p, 'ip'))
 
-        self.logfmc.logger.warning("getting real ports-protocols from named port objects")
+        self.logfmc.warning("getting real ports-protocols from named port objects")
         current_ruleset['real_port'] = current_ruleset['port'].apply(lambda p: self.fdp_grouper(p, 'port'))
         ruleset['real_port'] = ruleset['port'].apply(lambda p: self.fdp_grouper(p, 'port'))
 
@@ -417,7 +420,7 @@ class AugmentedWorker:
         try:
             ruleset.drop(idx_collector, inplace=True)
             ruleset.reset_index(inplace=True, drop=True)
-            self.logfmc.logger.warning(f"{'#' * 3}DROP {len(idx_collector)} DUP RULES{'#' * 3}")
+            self.logfmc.warning(f"{'#' * 3}DROP {len(idx_collector)} DUP RULES{'#' * 3}")
         except:
             # no dups to drop
             pass
@@ -446,77 +449,6 @@ class AugmentedWorker:
         # if we dont know where this zone is coming it must be from external
         return {f"{type_}_zone": self.zone_of_last_resort, f'{type_}_network': self.ippp[f'fmc_name_{type_}'][i]}
 
-    def del_fmc_objects(self, type_, obj_type,where):
-        """PLEASE BE AS SPECIFIC AS POSSIBLE"""
-        # get the latest created objects
-        self.fmc_net_port_info()
-        if not isinstance(where, str):
-            raise ValueError(f'where value is not type str. you passed an {type(where)} object')
-        self.utils.permission_check(f'Are you sure you want to delete {obj_type.upper()} ***{where}*** {type_} objects?')
-        if type_ == 'network':
-            def net_delete():
-                del_list = [i[2] for i in self.net_data if where in i[0]] if where != 'all' else [i[2] for i in self.net_data]
-                for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {obj_type} objects'):
-                    try:
-                        if '/' in obj_id[1]:
-                            self.fmc.object.network.delete(obj_id)
-                        else:
-                            self.fmc.object.host.delete(obj_id)
-                    except Exception as error:
-                        self.logfmc.logger.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
-
-            def net_port_delete():
-                del_list = [i[2] for i in self.net_group_object if where in i[0]] if where != 'all' else [i[2] for i in self.net_group_object]
-                for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {obj_type} objects'):
-                    try:
-                        self.fmc.object.networkgroup.delete(obj_id)
-                    except Exception as error:
-                        self.logfmc.logger.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
-
-            if obj_type == 'net':
-                net_delete()
-            elif obj_type == 'net_group':
-                net_port_delete()
-            elif obj_type == 'all':
-                net_port_delete()
-                net_delete()
-
-        elif type_ == 'port':
-            def del_port():
-                del_list = [i[3] for i in self.port_data if where in i[0]] if where != 'all' else [i[3] for i in self.port_data]
-                for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {obj_type} objects'):
-                    try:
-                        self.fmc.object.protocolportobject.delete(obj_id)
-                    except Exception as error:
-                        self.logfmc.logger.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
-
-            def del_port_group():
-                del_list = [i[2] for i in self.port_group_object if where in i[0]] if where != 'all' else [i[2] for i in self.port_group_object]
-                for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {obj_type} objects'):
-                    try:
-                        self.fmc.object.portobjectgroup.delete(obj_id)
-                    except Exception as error:
-                        self.logfmc.logger.error(f'Cannot delete {obj_id} from set {obj_type} of {type_} \n received code: {error}')
-            if obj_type == 'port':
-                del_port()
-            elif obj_type == 'port_group':
-                del_port_group()
-            elif obj_type == 'all':
-                del_port_group()
-                del_port()
-
-        elif type_ == 'rule':
-            acp_id = self.fmc.policy.accesspolicy.get(name=self.access_policy)
-            acp_rules = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id['id'])
-            del_list = [i['name'] for i in acp_rules if where in i['name']] if where != 'all' else acp_rules
-            for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {where} rules'):
-                try:
-                    self.fmc.policy.accesspolicy.accessrule.delete(container_uuid=acp_id['id'], name=obj_id)
-                except Exception as error:
-                    self.logfmc.logger.error(f'Cannot delete {obj_id} from set {where} for rules \n received code: {error}')
-        else:
-            raise NotImplementedError(f'type_ not found please select rule, port, or network. you passed {type_}')
-
     def zbr_bypass_check(self):
         if self.zbr_bypass is None:
             self.zone_ip_info['ip_cidr'] = self.zone_ip_info['IP'].astype(str) + '/' + self.zone_ip_info['CIDR'].astype(str)
@@ -529,13 +461,6 @@ class AugmentedWorker:
 
     def create_acp_rule(self):
         ruleset = []
-
-        def fix_object(x):
-            try:
-                x = x[0]
-            except:
-                x = x
-            return [{'name': x['name'], 'id': x['id'], 'type': x['type']}]
         self.zbr_bypass_check()
         # sort rules in a pretty format
         for i in self.ippp.index:
@@ -556,7 +481,7 @@ class AugmentedWorker:
         if ruleset.empty:
             raise Exception('NOTHING IN RULESET THEY MIGHT ALL BE THE SAME ZONE')
         acp_set = self.fmc.policy.accesspolicy.get(name=self.access_policy)
-        ruleset = self.find_dup_policies(ruleset, acp_set)
+        ruleset = self.find_inter_dup_policies(ruleset, acp_set)
 
         # if we removed all the dups and we have no new rules or for some reason we dont have rules to deploy raise to stop the program
         try:
@@ -619,9 +544,9 @@ class AugmentedWorker:
             ruleset[col] = ruleset[col].apply(lambda x: list(v for v in x) if isinstance(x, tuple) else x)
 
         # since we grouped policy find the dups again and get rid of em
-        ruleset = self.find_dup_policies(ruleset, acp_set)
+        ruleset = self.find_inter_dup_policies(ruleset, acp_set)
         if ruleset.empty:
-            self.logfmc.logger.warning('NO RULES TO DEPLOY')
+            self.logfmc.warning('NO RULES TO DEPLOY')
             return
 
         # real cols are for function lookup use
@@ -631,6 +556,15 @@ class AugmentedWorker:
         ruleset_loc = self.utils.create_file_path('predeploy_rules', f"fmc_ruleset_preload_configs_{dt_now}.csv", )
         ruleset.to_csv(ruleset_loc, index=False)
         self.utils.permission_check(f'REVIEW PRE-DEPLOY RULESET FILE located at {ruleset_loc}')
+        return ruleset,acp_set
+
+    def deploy_rules(self,new_rules,current_acp_rules):
+        def fix_object(x):
+            try:
+                x = x[0]
+            except:
+                x = x
+            return [{'name': x['name'], 'id': x['id'], 'type': x['type']}]
 
         temp_form = {
             "action": self.ruleset_type, "enabled": 'true', "type": "AccessRule",
@@ -645,8 +579,8 @@ class AugmentedWorker:
         take_num = 1
         cgj_num = take_num
         cgp_num = take_num
-        for i in tqdm(ruleset.index, desc='Loading bulk rule collection artifacts', total=len(ruleset.index), colour='green'):
-            rule = ruleset.loc[i].to_dict()
+        for i in tqdm(new_rules.index, desc='Loading bulk rule collection artifacts', total=len(new_rules.index), colour='green'):
+            rule = new_rules.loc[i].to_dict()
             dh = {}
             for k, v in rule.items():
                 if isinstance(v, str):
@@ -660,7 +594,10 @@ class AugmentedWorker:
                             # any is coming as list so lets strip it just in case this is due to how the policy lookup occurred
                             v = 'any'
                     else:
+                        # avoid rate limiting
                         sleep(5)
+                        # bug fix for connection dropping out mid way due to rate-limiting
+                        self.rest_connection()
                         # get new port/net info per iteration so we dont create dup objects that have the same child IDs on creation if needed
                         self.fmc_net_port_info()
                         # the inner break controls the for-loop and need a mechanism to break IF we matched on already created group
@@ -675,17 +612,19 @@ class AugmentedWorker:
                                         break
                                 if not matched:
                                     # create group net or port objs by IDs since fmc cant create rules with more than 50 objects
-                                    if len(v) > 50:
-                                        create_group_obj = {'objects': [{'type': name_ip_id[1], 'id': name_ip_id[2]} for ip in v for name_ip_id in self.net_data if ip == name_ip_id[0]], 'name': f"{self.rule_prepend_name}_NetGroup_{cgj_num}"}
-                                        cgj_num += 1
-                                        try:
-                                            if len(create_group_obj['objects']) > 1:
-                                                response = self.fmc.object.networkgroup.create(create_group_obj)
-                                                if 'already exists' not in str(response):
-                                                    self._creation_check(response, create_group_obj['name'], output=False)
-                                            v = create_group_obj['name']
-                                        except Exception as error:
-                                            self.logfmc.logger.error(error)
+                                    if len(v) >= 50:
+                                        while True:
+                                            create_group_obj = {'objects': [{'type': name_ip_id[1], 'id': name_ip_id[2]} for ip in v for name_ip_id in self.net_data if ip == name_ip_id[0]], 'name': f"{self.rule_prepend_name}_NetGroup_{cgj_num}"}
+                                            cgj_num += 1
+                                            try:
+                                                if len(create_group_obj['objects']) > 1:
+                                                    response = self.fmc.object.networkgroup.create(create_group_obj)
+                                                    if 'already exists' not in str(response):
+                                                        self._creation_check(response, create_group_obj['name'], output=False)
+                                                v = create_group_obj['name']
+                                                break
+                                            except Exception as error:
+                                                self.logfmc.error(error)
                                     matched = True
 
                             elif 'port' in k:
@@ -698,17 +637,19 @@ class AugmentedWorker:
                                         break
                                 if not matched:
                                     # create group net or port objs by IDs since fmc cant create rules with more than 50 objects
-                                    if len(v) > 50:
-                                        create_group_obj = {'objects': [{'type': name_port_id[4], 'id': name_port_id[3]} for port in v for name_port_id in self.port_data if port == name_port_id[0]], 'name': f"{self.rule_prepend_name}_PortGroup_{cgp_num}"}
-                                        cgp_num += 1
-                                        try:
-                                            if len(create_group_obj['objects']) > 1:
-                                                response = self.fmc.object.portobjectgroup.create(create_group_obj)
-                                                if 'already exists' not in str(response):
-                                                    self._creation_check(response, create_group_obj['name'], output=False)
-                                            v = create_group_obj['name']
-                                        except Exception as error:
-                                            self.logfmc.logger.error(error)
+                                    if len(v) >= 50:
+                                        while True:
+                                            create_group_obj = {'objects': [{'type': name_port_id[4], 'id': name_port_id[3]} for port in v for name_port_id in self.port_data if port == name_port_id[0]], 'name': f"{self.rule_prepend_name}_PortGroup_{cgp_num}"}
+                                            cgp_num += 1
+                                            try:
+                                                if len(create_group_obj['objects']) > 1:
+                                                    response = self.fmc.object.portobjectgroup.create(create_group_obj)
+                                                    if 'already exists' not in str(response):
+                                                        self._creation_check(response, create_group_obj['name'], output=False)
+                                                v = create_group_obj['name']
+                                                break
+                                            except Exception as error:
+                                                self.logfmc.error(error)
                                     matched = True
                 dh[k] = v
             rule = dh
@@ -755,13 +696,15 @@ class AugmentedWorker:
             charity_policy.append(rule_form)
 
         try:
-            res = self.fmc.policy.accesspolicy.accessrule.create(data=charity_policy, container_uuid=acp_set['id'], category='automation_engine', )
+            res = self.fmc.policy.accesspolicy.accessrule.create(data=charity_policy, container_uuid=current_acp_rules['id'], category='automation_engine', )
             self._creation_check(res, charity_policy)
-            self.logfmc.logger.warning(f'{"#" * 5}RULES PUSHED SUCCESSFULLY{"#" * 5}')
+            self.logfmc.warning(f'{"#" * 5}RULES PUSHED SUCCESSFULLY{"#" * 5}')
+            return True
         except Exception as error:
-            self.logfmc.logger.error(error)
+            self.logfmc.error(error)
+            return False
 
-    def policy_manipulation_flow(self,checkup=False):
+    def policy_deployment_flow(self,checkup=False):
         # login FMC
         self.rest_connection()
         # Get zone info first via ClI
@@ -774,20 +717,26 @@ class AugmentedWorker:
         self.ippp = self.retrieve_ippp()
         # create FMC objects
         self.create_fmc_object_names()
-        # restart conn??
+        # restart conn
         self.rest_connection(reset=True)
+        ffc = FireCheck(self)
         if checkup:
-            TestRun(self).compare_ipp_acp()
+            ffc.compare_ippp_acp()
         else:
             # create FMC rules
-            self.create_acp_rule()
-            # test rule Checkup
-            TestRun(self).compare_ipp_acp()
+            ruleset,acp_set = self.create_acp_rule()
+            # deploy rules
+            successful = self.deploy_rules(new_rules=ruleset,current_acp_rules=acp_set)
+            if successful:
+                # test rule Checkup
+                ffc.compare_ippp_acp()
+            else:
+                raise Exception('An error occured while processing the rules')
 
     @staticmethod
     @deprecated
     def _get_device_creds(cred_file):
-        cred_file = util().create_file_path('safe', cred_file)
+        cred_file = Util().create_file_path('safe', cred_file)
         with open(cred_file, 'r') as cf:
             return json.load(cf)
 
@@ -810,8 +759,8 @@ class AugmentedWorker:
 
 
 if __name__ == "__main__":
-    augWork = AugmentedWorker(ippp_location='gfrs.csv', access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone', same_cred=False, cred_file='cF.json')
-    augWork.policy_manipulation_flow()
+    augWork = FireStick(ippp_location='gfrs.csv', access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone', same_cred=False, cred_file='cF.json')
+    augWork.policy_deployment_flow(checkup=True)
     # augWork.rest_connection()
     # augWork.del_fmc_objects(type_='port',where='all',obj_type='all')
     # augWork.del_fmc_objects(type_='network',where='all',obj_type='all')
