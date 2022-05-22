@@ -612,17 +612,19 @@ class FireStick:
                                         break
                                 if not matched:
                                     # create group net or port objs by IDs since fmc cant create rules with more than 50 objects
-                                    if len(v) > 50:
-                                        create_group_obj = {'objects': [{'type': name_ip_id[1], 'id': name_ip_id[2]} for ip in v for name_ip_id in self.net_data if ip == name_ip_id[0]], 'name': f"{self.rule_prepend_name}_NetGroup_{cgj_num}"}
-                                        cgj_num += 1
-                                        try:
-                                            if len(create_group_obj['objects']) > 1:
-                                                response = self.fmc.object.networkgroup.create(create_group_obj)
-                                                if 'already exists' not in str(response):
-                                                    self._creation_check(response, create_group_obj['name'], output=False)
-                                            v = create_group_obj['name']
-                                        except Exception as error:
-                                            self.logfmc.error(error)
+                                    if len(v) >= 50:
+                                        while True:
+                                            create_group_obj = {'objects': [{'type': name_ip_id[1], 'id': name_ip_id[2]} for ip in v for name_ip_id in self.net_data if ip == name_ip_id[0]], 'name': f"{self.rule_prepend_name}_NetGroup_{cgj_num}"}
+                                            cgj_num += 1
+                                            try:
+                                                if len(create_group_obj['objects']) > 1:
+                                                    response = self.fmc.object.networkgroup.create(create_group_obj)
+                                                    if 'already exists' not in str(response):
+                                                        self._creation_check(response, create_group_obj['name'], output=False)
+                                                v = create_group_obj['name']
+                                                break
+                                            except Exception as error:
+                                                self.logfmc.error(error)
                                     matched = True
 
                             elif 'port' in k:
@@ -635,17 +637,19 @@ class FireStick:
                                         break
                                 if not matched:
                                     # create group net or port objs by IDs since fmc cant create rules with more than 50 objects
-                                    if len(v) > 50:
-                                        create_group_obj = {'objects': [{'type': name_port_id[4], 'id': name_port_id[3]} for port in v for name_port_id in self.port_data if port == name_port_id[0]], 'name': f"{self.rule_prepend_name}_PortGroup_{cgp_num}"}
-                                        cgp_num += 1
-                                        try:
-                                            if len(create_group_obj['objects']) > 1:
-                                                response = self.fmc.object.portobjectgroup.create(create_group_obj)
-                                                if 'already exists' not in str(response):
-                                                    self._creation_check(response, create_group_obj['name'], output=False)
-                                            v = create_group_obj['name']
-                                        except Exception as error:
-                                            self.logfmc.error(error)
+                                    if len(v) >= 50:
+                                        while True:
+                                            create_group_obj = {'objects': [{'type': name_port_id[4], 'id': name_port_id[3]} for port in v for name_port_id in self.port_data if port == name_port_id[0]], 'name': f"{self.rule_prepend_name}_PortGroup_{cgp_num}"}
+                                            cgp_num += 1
+                                            try:
+                                                if len(create_group_obj['objects']) > 1:
+                                                    response = self.fmc.object.portobjectgroup.create(create_group_obj)
+                                                    if 'already exists' not in str(response):
+                                                        self._creation_check(response, create_group_obj['name'], output=False)
+                                                v = create_group_obj['name']
+                                                break
+                                            except Exception as error:
+                                                self.logfmc.error(error)
                                     matched = True
                 dh[k] = v
             rule = dh
@@ -754,11 +758,9 @@ class FireStick:
         return cdict
 
 
-# todo: need to test run again since we change how ACP looks like
-
 if __name__ == "__main__":
     augWork = FireStick(ippp_location='gfrs.csv', access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone', same_cred=False, cred_file='cF.json')
-    augWork.policy_deployment_flow()
+    augWork.policy_deployment_flow(checkup=True)
     # augWork.rest_connection()
     # augWork.del_fmc_objects(type_='port',where='all',obj_type='all')
     # augWork.del_fmc_objects(type_='network',where='all',obj_type='all')

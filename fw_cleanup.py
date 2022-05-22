@@ -183,7 +183,15 @@ class FireBroom(FireStick):
         # Delete old rules
         self.del_fmc_objects(type_='rule',obj_type='all')
         # send new rules
-        self.deploy_rules(collapsed_rules,acp_id)
+        success = self.deploy_rules(collapsed_rules,acp_id)
+        if not success:
+            self.logfmc.critical('Couldnt push new configs. Rolling Back!')
+            self.rollback_acp_op(acp_rules, acp_id, comment=comment)
+            # move old temp to archive
+            archive_dir = self.utils.create_file_path('archive', recovery_fname)
+            replace(recovery_loc, archive_dir)
+            return
+
         # test if deploy matches original
         self.ippp = acp_rules.copy()
         self.ippp.rename(columns={'src_z': 'source_zone', 'dst_z': 'destination_zone', 'source': 'source_network', 'destination': 'destination_network'}, inplace=True)
@@ -212,7 +220,7 @@ class FireBroom(FireStick):
 
 if __name__ == "__main__":
     weeper = FireBroom(access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_1', zone_of_last_resort='outside_zone')
-    weeper.collapse_fmc_rules(comment='tester123',recover=True)
+    weeper.collapse_fmc_rules(comment='tester123')
     # augWork.del_fmc_objects(type_='port',obj_type='all')
     # augWork.del_fmc_objects(type_='network',,obj_type='all')
     # augWork.del_fmc_objects(type_='network',obj_type='all')

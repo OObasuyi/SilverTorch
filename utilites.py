@@ -159,7 +159,6 @@ def log_collector(log_all=False):
     else:
         logger = logging.getLogger()
 
-    logger.propagate = False
     logger.setLevel(logging.DEBUG)
     if logger.hasHandlers():
         logger.handlers = []
