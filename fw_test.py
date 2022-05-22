@@ -2,8 +2,6 @@ import pandas as pd
 from ipaddress import ip_network
 from datetime import datetime
 from tqdm import tqdm
-from utilites import log_collector
-
 
 class FireCheck:
     def __init__(self,af_class):
