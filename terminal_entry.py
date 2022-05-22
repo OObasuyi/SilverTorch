@@ -26,6 +26,7 @@ def terminal_entry():
 
     optional_args = parser.add_argument_group(title='SilverTorch Rule Cleanup Fields')
     optional_args.add_argument('--comment', default=False, help='comment to leave collapsed/combined rule', type=str)
+    optional_args.add_argument('--recovery_mode', default=False, help='recover old ACP file if the program crashed', type=bool)
 
 
     args = parser.parse_args()
@@ -43,7 +44,7 @@ def terminal_entry():
     if args.ippp_checkup:
         fm.policy_deployment_flow(checkup=True)
     elif args.rule_cleanup:
-        fb.collapse_fmc_rules(comment=args.comment)
+        fb.collapse_fmc_rules(comment=args.comment,recover=args.recovery_mode)
     else:
         fm.policy_deployment_flow()
 

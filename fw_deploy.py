@@ -596,6 +596,8 @@ class FireStick:
                     else:
                         # avoid rate limiting
                         sleep(5)
+                        # bug fix for connection dropping out mid way due to rate-limiting
+                        self.rest_connection()
                         # get new port/net info per iteration so we dont create dup objects that have the same child IDs on creation if needed
                         self.fmc_net_port_info()
                         # the inner break controls the for-loop and need a mechanism to break IF we matched on already created group

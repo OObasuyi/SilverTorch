@@ -1,8 +1,10 @@
+from datetime import datetime
+
 from fw_deploy import FireStick
 from tqdm import tqdm
 import pandas as pd
-from datetime import datetime
-
+import pickle
+from os import replace
 from fw_test import FireCheck
 
 
@@ -92,18 +94,35 @@ class FireBroom(FireStick):
         else:
             raise NotImplementedError(f'type_ not found please select rule, port, or network. you passed {type_}')
 
-    def collapse_fmc_rules(self,comment:str=False):
+    def collapse_fmc_rules(self,comment:str=False,recover:bool=False):
+        dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
+        save_ext = 'rulbk'
+        recovery_loc = self.utils.create_file_path('temp',f'{self.rule_prepend_name}_save_{dt_now}.{save_ext}')
         if not isinstance(comment,str):
             raise ValueError('COMMENT VALUE MUST BE PASSED')
         acp_id, acp_rules = self.rule_objects()
         self.fmc_net_port_info()
-        acp_rules = self.utils.transform_acp(acp_rules, self)
-        acp_rules = acp_rules[acp_rules['policy_name'].str.startswith(self.rule_prepend_name)]
-        # no rule test
-        if acp_rules.empty:
-            raise Exception(f'rules starting with {self.rule_prepend_name} was not found!')
-        # in case we fail our rule test
-        rollback_acp = acp_rules.copy()
+        if not recover:
+            acp_rules = self.utils.transform_acp(acp_rules, self)
+            acp_rules = acp_rules[acp_rules['policy_name'].str.startswith(self.rule_prepend_name)]
+            # no rule test
+            if acp_rules.empty:
+                raise Exception(f'rules starting with {self.rule_prepend_name} was not found!')
+
+        # there should only one file in this dir from last run
+        if recover:
+            self.logfmc.warning('entering recovery mode')
+            recovery_loc = self.utils.get_files_from_dir('temp', save_ext)[0]
+            with open(recovery_loc, 'rb') as save_rule:
+                rollback_acp = pickle.load(save_rule)
+            self.logfmc.debug(f'recovered {recovery_loc} file')
+            acp_rules = rollback_acp
+        else:
+            # in case we fail our rule test or error happens while processing
+            rollback_acp = acp_rules.copy()
+            with open(recovery_loc, 'wb') as save_rule:
+                pickle.dump(rollback_acp, save_rule)
+
         for col in acp_rules.columns:
             acp_rules[col] = acp_rules[col].apply(lambda x: tuple(v for v in x) if isinstance(x, list) else x)
         # fill in vals that are really any
@@ -173,6 +192,9 @@ class FireBroom(FireStick):
             self.del_fmc_objects(type_='port',obj_type='all')
             self.del_fmc_objects(type_='network',obj_type='all')
             self.logfmc.warning(f'completed firewall cleanup for ***{self.rule_prepend_name}***')
+            # move old temp to archive
+            archive_dir = self.utils.create_file_path('archive', f'rollback_rules_{dt_now}.{save_ext}')
+            replace(recovery_loc,archive_dir)
 
     def rollback_acp_op(self,rollback_pd,acp_id,comment:str=False):
         rollback_pd.rename(columns={'src_z': 'source_zone', 'dst_z': 'destination_zone','source': 'source_network', 'destination': 'destination_network'}, inplace=True)
@@ -185,7 +207,7 @@ class FireBroom(FireStick):
 
 if __name__ == "__main__":
     weeper = FireBroom(access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone')
-    weeper.collapse_fmc_rules(comment='tester123')
+    weeper.collapse_fmc_rules(comment='tester123',recover=True)
     # augWork.del_fmc_objects(type_='port',obj_type='all')
     # augWork.del_fmc_objects(type_='network',,obj_type='all')
     # augWork.del_fmc_objects(type_='network',obj_type='all')

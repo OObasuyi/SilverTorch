@@ -4,10 +4,12 @@ from functools import wraps
 from json import load, dump
 from logging import warning
 from logging.handlers import TimedRotatingFileHandler
-from os import path, makedirs, replace
-from os import rename, remove
+from os import path, makedirs, replace,rename, remove,walk
+
 
 import pandas as pd
+
+TOP_DIR = path.dirname(path.abspath(__file__))
 
 
 class Util:
@@ -27,21 +29,21 @@ class Util:
 
     @staticmethod
     def create_file_path(folder:str,file_name:str):
-        top_dir = path.dirname(path.abspath(__file__))
-        allowed_exts = ['csv','log','txt','json']
+        TOP_DIR = path.dirname(path.abspath(__file__))
+        allowed_exts = ['csv','log','txt','json','rulbk']
 
         input_ext = '.'.join(file_name.split(".")[1:])
         if input_ext.lower() not in allowed_exts:
             raise ValueError(f'please ensure you using one of the allowed file types you gave {input_ext}')
 
-        fName = f'{top_dir}/{folder}/{file_name}'
-        if not path.exists(f'{top_dir}/{folder}'):
-            makedirs(f'{top_dir}/{folder}')
+        fName = f'{TOP_DIR}/{folder}/{file_name}'
+        if not path.exists(f'{TOP_DIR}/{folder}'):
+            makedirs(f'{TOP_DIR}/{folder}')
 
         # move file to correct dir if needed
         if not path.exists(fName):
             try:
-                replace(f'{top_dir}/{file_name}',fName)
+                replace(f'{TOP_DIR}/{file_name}',fName)
             except:
                 # file has yet to be created or not in top path
                 pass
@@ -133,6 +135,12 @@ class Util:
             changed_ruleset.append(subset_rule)
         current_ruleset = changed_ruleset
         return pd.DataFrame(current_ruleset)
+
+    @staticmethod
+    def get_files_from_dir(folder,look_for_ext):
+        dir_path = path.join(TOP_DIR, folder)
+        _, _, filenames = next(walk(dir_path))
+        return [path.join(dir_path, file) for file in filenames if file.endswith(look_for_ext)]
 
 
 def deprecated(func):
