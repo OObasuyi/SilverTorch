@@ -2,12 +2,13 @@ import pandas as pd
 from ipaddress import ip_network
 from datetime import datetime
 from tqdm import tqdm
+from utilites import log_collector
 
 
 class FireCheck:
     def __init__(self,af_class):
         self.copy_class = af_class
-    
+        self.logfmc = self.copy_class.logfmc
     def _fix_ippp_data(self):
         self.copy_class.zbr_bypass_check()
         test_ippp = self.copy_class.ippp[['source', 'destination', 'protocol', 'port']]
@@ -29,7 +30,7 @@ class FireCheck:
             rule_flow.update(dst_flow)
             rule_flow.update({'port': test_ippp['port'][i] if test_ippp['port'][i] != 'any' else 'any'})
             ruleset.append(rule_flow)
-        self.copy_class.logfmc.warning(f'Dropped {same_zone_counter} rules from the IPPP which are the same zone')
+        self.logfmc.warning(f'Dropped {same_zone_counter} rules from the IPPP which are the same zone')
         test_ippp = pd.DataFrame(ruleset)
         return test_ippp
     
@@ -84,34 +85,54 @@ class FireCheck:
                         cr_item = cr_list[idx]
 
                     breakout = False
+                    sub_match_found = 0
                     for i in test_item:
                         for ci in cr_item:
-                            if idx in [0,1]:
-                                # try to catch 'any'
-                                if i == ci:
-                                    match_found += 1
-                                    breakout = True
-                                    break
-                                try:
-                                    # catch None types
-                                    if ip_network(i).subnet_of(ip_network(ci)):
+                            if fix_ippp:
+                                if idx in [0,1]:
+                                    # try to catch 'any'
+                                    if i == ci:
                                         match_found += 1
                                         breakout = True
                                         break
-                                except Exception as error:
-                                    self.copy_class.logfmc.debug(error)
+                                    try:
+                                        # catch None types
+                                        if ip_network(i).subnet_of(ip_network(ci)):
+                                            match_found += 1
+                                            breakout = True
+                                            break
+                                    except Exception as error:
+                                        self.logfmc.debug(error)
 
-                            elif i == ci:
-                                match_found += 1
-                                breakout = True
-                                break
-
+                                elif i == ci:
+                                    match_found += 1
+                                    breakout = True
+                                    break
+                            else:
+                                # non ippps like flow
+                                if idx in [0, 1]:
+                                    if i == ci:
+                                        sub_match_found += 1
+                                        break
+                                    try:
+                                        # catch None types
+                                        if ip_network(i).subnet_of(ip_network(ci)):
+                                            sub_match_found +=1
+                                            break
+                                    except Exception as error:
+                                        self.logfmc.debug(error)
+                                elif i == ci:
+                                    sub_match_found += 1
+                                    break
                         if breakout:
                             break
+                    if not fix_ippp:
+                        if sub_match_found == len(test_item):
+                            match_found += 1
 
                 if match_found >= 5:
                     found_in_policy.append(ti)
-        self.copy_class.logfmc.warning(f'Found {len(found_in_policy)} of {len(test_ippp)} from IPPP implemented in ACP')
+        self.logfmc.warning(f'Found {len(found_in_policy)} of {len(test_ippp)} from IPPP implemented in ACP')
         # gather rules not seen in ACP from IPPP
         if len(found_in_policy) != len(test_ippp):
             dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
@@ -119,10 +140,10 @@ class FireCheck:
             test_ippp.drop(found_in_policy,inplace=True)
             test_ippp.reset_index(inplace=True, drop=True)
             test_ippp.to_csv(not_found_rules, index=False)
-            self.copy_class.logfmc.warning(f'rules not found in ACP are located in {not_found_rules}')
+            self.logfmc.warning(f'rules not found in ACP are located in {not_found_rules}')
             return False
         else:
-            self.copy_class.logfmc.warning(f'All Rules from IPPP implemented')
+            self.logfmc.warning(f'All Rules from IPPP implemented')
             return True
 
 

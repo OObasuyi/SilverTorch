@@ -1,6 +1,7 @@
 from fw_deploy import FireStick
 from tqdm import tqdm
 import pandas as pd
+from datetime import datetime
 
 from fw_test import FireCheck
 
@@ -92,6 +93,8 @@ class FireBroom(FireStick):
             raise NotImplementedError(f'type_ not found please select rule, port, or network. you passed {type_}')
 
     def collapse_fmc_rules(self,comment:str=False):
+        if not isinstance(comment,str):
+            raise ValueError('COMMENT VALUE MUST BE PASSED')
         acp_id, acp_rules = self.rule_objects()
         self.fmc_net_port_info()
         acp_rules = self.utils.transform_acp(acp_rules, self)

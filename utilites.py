@@ -149,7 +149,7 @@ def log_collector(log_all=False):
     fName = Util().create_file_path('logs', 'firepyower.log')
 
     if not log_all:
-        logger = logging.getLogger(__name__)
+        logger = logging.getLogger('SilverTorch')
     else:
         logger = logging.getLogger()
 
