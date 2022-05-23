@@ -102,6 +102,56 @@ class FireStick:
         self.port_data = [tuple([str(x.get('name')), str(x.get('protocol')), str(x.get('port')), str(x['id']), str(x['type'])]) for x in port_objects]
         self.port_group_object = [tuple([str(x['name']), get_name_from_group_object(x.get('objects'), obj_type='port'), str(x['id'])]) for x in port_group_object]
 
+    def retrieve_rule_objects(self):
+        acp_id = self.fmc.policy.accesspolicy.get(name=self.access_policy)
+        acp_rules = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id['id'])
+        return acp_id, acp_rules
+
+    def transform_rulesets(self,ruleset=None,save=False,save_all=False):
+        def flatten(d):
+            out = {}
+            for key, val in d.items():
+                if isinstance(val, dict):
+                    val = [val]
+                if isinstance(val, list):
+                    for subdict in val:
+                        deeper = flatten(subdict).items()
+                        out.update({key + '_' + key2: val2 for key2, val2 in deeper})
+                else:
+                    out[key] = val
+            return out
+        # find existing policy in fmc
+        _, current_ruleset = self.retrieve_rule_objects()
+        current_ruleset = self.utils.transform_acp(current_ruleset,self)
+        if len(current_ruleset) < 1:
+            self.logfmc.error('nothing in current ruleset')
+            return ruleset
+
+        self.logfmc.warning("getting real IPs from named network objects")
+        for ip in ['source', 'destination']:
+            current_ruleset[f'real_{ip}'] = current_ruleset[ip].apply(lambda p: self.fdp_grouper(p, 'ip'))
+            if ruleset is not None:
+                ruleset[f'real_{ip}'] = ruleset[f'{ip}_network'].apply(lambda p: self.fdp_grouper(p, 'ip'))
+
+        self.logfmc.warning("getting real ports-protocols from named port objects")
+        current_ruleset['real_port'] = current_ruleset['port'].apply(lambda p: self.fdp_grouper(p, 'port'))
+        if ruleset is not None:
+            ruleset['real_port'] = ruleset['port'].apply(lambda p: self.fdp_grouper(p, 'port'))
+
+        # remove nan values with any
+        current_ruleset.fillna(value='any', inplace=True)
+        current_ruleset.replace({'None': 'any'}, inplace=True)
+        if ruleset is not None:
+            ruleset.fillna(value='any', inplace=True)
+        if save:
+            if save_all:
+                save_name = self.utils.create_file_path('saved_rules',f'all_{self.access_policy}.csv')
+            else:
+                save_name = self.utils.create_file_path('saved_rules', f'{self.rule_prepend_name}_{self.access_policy}.csv')
+            current_ruleset.to_csv(save_name,index=False)
+        if ruleset is not None:
+            return ruleset,current_ruleset
+
     @staticmethod
     def _ip_address_check(x):
         # check if user entered a hot bits in thier subnet mask
@@ -315,40 +365,8 @@ class FireStick:
             else:
                 return sorted(list(set(f"{px[1]}:{px[2]}" for rulep in p for px in self.port_data if rulep == px[0])))
 
-    def find_inter_dup_policies(self, ruleset, acp_set):
-        def flatten(d):
-            out = {}
-            for key, val in d.items():
-                if isinstance(val, dict):
-                    val = [val]
-                if isinstance(val, list):
-                    for subdict in val:
-                        deeper = flatten(subdict).items()
-                        out.update({key + '_' + key2: val2 for key2, val2 in deeper})
-                else:
-                    out[key] = val
-            return out
-        # find existing policy in fmc
-        current_ruleset = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_set['id'])
-        current_ruleset = self.utils.transform_acp(current_ruleset,self)
-        if len(current_ruleset) < 1:
-            self.logfmc.error('nothing in current ruleset')
-            return ruleset
-
-        self.logfmc.warning("getting real IPs from named network objects")
-        for ip in ['source', 'destination']:
-            current_ruleset[f'real_{ip}'] = current_ruleset[ip].apply(lambda p: self.fdp_grouper(p, 'ip'))
-            ruleset[f'real_{ip}'] = ruleset[f'{ip}_network'].apply(lambda p: self.fdp_grouper(p, 'ip'))
-
-        self.logfmc.warning("getting real ports-protocols from named port objects")
-        current_ruleset['real_port'] = current_ruleset['port'].apply(lambda p: self.fdp_grouper(p, 'port'))
-        ruleset['real_port'] = ruleset['port'].apply(lambda p: self.fdp_grouper(p, 'port'))
-
-        # remove nan values with any
-        current_ruleset.fillna(value='any', inplace=True)
-        ruleset.fillna(value='any', inplace=True)
-        current_ruleset.replace({'None': 'any'}, inplace=True)
-
+    def find_inter_dup_policies(self, ruleset):
+        ruleset, current_ruleset = self.transform_rulesets(ruleset=ruleset)
         # make sure we are matching by list type and sorting correctly even if its a list object
         for col in ruleset.columns:
             ruleset[col] = ruleset[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple, list)) else x)
@@ -551,11 +569,6 @@ class FireStick:
 
         # real cols are for function lookup use
         ruleset = ruleset.loc[:, ~ruleset.columns.str.startswith('real')]
-
-        dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
-        ruleset_loc = self.utils.create_file_path('predeploy_rules', f"fmc_ruleset_preload_configs_{dt_now}.csv", )
-        ruleset.to_csv(ruleset_loc, index=False)
-        self.utils.permission_check(f'REVIEW PRE-DEPLOY RULESET FILE located at {ruleset_loc}')
         return ruleset,acp_set
 
     def deploy_rules(self,new_rules,current_acp_rules):
@@ -565,6 +578,11 @@ class FireStick:
             except:
                 x = x
             return [{'name': x['name'], 'id': x['id'], 'type': x['type']}]
+
+        dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
+        ruleset_loc = self.utils.create_file_path('predeploy_rules', f"fmc_ruleset_preload_configs_{dt_now}.csv", )
+        new_rules.to_csv(ruleset_loc, index=False)
+        self.utils.permission_check(f'REVIEW PRE-DEPLOY RULESET FILE located at {ruleset_loc}')
 
         temp_form = {
             "action": self.ruleset_type, "enabled": 'true', "type": "AccessRule",
@@ -659,7 +677,7 @@ class FireStick:
 
             for srcdest_net in ['source', 'destination']:
                 if 'any' != rule[f'{srcdest_net}_network']:
-                    if '_NetGroup_' in rule[f'{srcdest_net}_network']:
+                    if '_NetGroup_' in rule[f'{srcdest_net}_network'] or '_net_group_' in rule[f'{srcdest_net}_network']:
                         # update npi if we created a grouped policy
                         self.fmc_net_port_info()
                         rule_form[f'{srcdest_net}Networks'] = {'objects': fix_object(self.fmc.object.networkgroup.get(name=rule[f'{srcdest_net}_network']))}
@@ -681,7 +699,7 @@ class FireStick:
                         rule_form[f'{srcdest_z}Zones'] = {'objects': [all_zones[rule[f'{srcdest_z}_zone']]]}
 
             if 'any' != rule['port']:
-                if '_PortGroup_' in rule['port']:
+                if '_PortGroup_' in rule['port'] or '_port_group_' in rule['port']: # support legacy
                     # update npi if we created a grouped policy
                     self.fmc_net_port_info()
                     rule_form['destinationPorts'] = {'objects': fix_object(self.fmc.object.portobjectgroup.get(name=rule['port']))}

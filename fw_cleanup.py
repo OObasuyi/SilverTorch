@@ -10,15 +10,11 @@ from fw_test import FireCheck
 
 class FireBroom(FireStick):
     def __init__(self, fmc_host: str, ftd_host: str, access_policy: str, rule_prepend_name: str,
-            zone_of_last_resort: str, same_cred=False, ruleset_type='ALLOW',domain='Global'):
+            zone_of_last_resort: str, same_cred=True, ruleset_type='ALLOW',domain='Global'):
+        ippp_location = None
         super().__init__(fmc_host, ftd_host, ippp_location, access_policy, rule_prepend_name,
-                         zone_of_last_resort,same_cred=same_cred, cred_file=cred_file,ruleset_type=ruleset_type,domain=domain)
+                         zone_of_last_resort,same_cred=same_cred,ruleset_type=ruleset_type,domain=domain)
         self.rest_connection()
-
-    def rule_objects(self):
-        acp_id = self.fmc.policy.accesspolicy.get(name=self.access_policy)
-        acp_rules = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id['id'])
-        return acp_id,acp_rules
 
     def del_fmc_objects(self, type_, obj_type):
         """PLEASE BE AS SPECIFIC AS POSSIBLE"""
@@ -81,7 +77,7 @@ class FireBroom(FireStick):
                 del_port()
 
         elif type_ == 'rule':
-            acp_id,acp_rules = self.rule_objects()
+            acp_id,acp_rules = self.retrieve_rule_objects()
             del_list = [i['name'] for i in acp_rules if self.rule_prepend_name in i['name']] if self.rule_prepend_name != 'all' else acp_rules
             for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {self.rule_prepend_name} rules'):
                 try:
@@ -98,7 +94,7 @@ class FireBroom(FireStick):
         recovery_loc = self.utils.create_file_path('temp',recovery_fname)
         if not isinstance(comment,str):
             raise ValueError('COMMENT VALUE MUST BE PASSED')
-        acp_id, acp_rules = self.rule_objects()
+        acp_id, acp_rules = self.retrieve_rule_objects()
         self.fmc_net_port_info()
         if not recover:
             acp_rules = self.utils.transform_acp(acp_rules, self)
