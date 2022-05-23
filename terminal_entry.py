@@ -10,12 +10,12 @@ def terminal_entry():
     mandatory_args = parser.add_argument_group(title='SilverTorch Mandatory Fields')
     mandatory_args.add_argument('-fmc_host',required=True,type=str)
     mandatory_args.add_argument('-ftd_host',required=True,type=str)
-    mandatory_args.add_argument('-ippp_location',required=True,type=str)
     mandatory_args.add_argument('-access_policy',required=True,type=str)
     mandatory_args.add_argument('-rule_prepend_name',required=True,type=str)
     mandatory_args.add_argument('-zolr',help='zone of last resort', required=True,type=str)
 
     optional_args = parser.add_argument_group(title='SilverTorch Optional Fields')
+    mandatory_args.add_argument('-ippp_location',default=None,type=str)
     optional_args.add_argument('--ippp_checkup',default=False, help='Check whether the IPPP is found in the ACP', type=bool)
     optional_args.add_argument('--rule_cleanup',default=False, help='Clean ACP rules', type=bool)
     optional_args.add_argument('--domain',default='Global',action="store",type=str)
