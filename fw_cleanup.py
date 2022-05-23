@@ -13,7 +13,7 @@ class FireBroom(FireStick):
             zone_of_last_resort: str, same_cred=True, ruleset_type='ALLOW',domain='Global'):
         ippp_location = None
         super().__init__(fmc_host, ftd_host, ippp_location, access_policy, rule_prepend_name,
-                         zone_of_last_resort,same_cred=same_cred,ruleset_type=ruleset_type,domain=domain)
+                         zone_of_last_resort,same_cred=same_cred,ruleset_type=ruleset_type,domain=domain,cred_file='cf.json')
         self.rest_connection()
 
     def del_fmc_objects(self, type_, obj_type):
@@ -81,17 +81,18 @@ class FireBroom(FireStick):
             del_list = [i['name'] for i in acp_rules if self.rule_prepend_name in i['name']] if self.rule_prepend_name != 'all' else acp_rules
             for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {self.rule_prepend_name} rules'):
                 try:
-                    self.fmc.policy.accesspolicy.accessrule.delete(container_uuid=acp_id['id'], name=obj_id)
+                    self.fmc.policy.accesspolicy.accessrule.delete(container_uuid=acp_id, name=obj_id)
                 except Exception as error:
                     self.logfmc.error(f'Cannot delete {obj_id} from set {self.rule_prepend_name} for rules \n received code: {error}')
         else:
             raise NotImplementedError(f'type_ not found please select rule, port, or network. you passed {type_}')
 
     def collapse_fmc_rules(self,comment:str=False,recover:bool=False):
+        temp_dir = 'temp_rules'
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
         save_ext = 'rulbk'
         recovery_fname = f'{self.rule_prepend_name}_save_{dt_now}.{save_ext}'
-        recovery_loc = self.utils.create_file_path('temp',recovery_fname)
+        recovery_loc = self.utils.create_file_path(temp_dir,recovery_fname)
         if not isinstance(comment,str):
             raise ValueError('COMMENT VALUE MUST BE PASSED')
         acp_id, acp_rules = self.retrieve_rule_objects()
@@ -106,7 +107,7 @@ class FireBroom(FireStick):
         # there should only one file in this dir from last run
         if recover:
             self.logfmc.warning('entering recovery mode')
-            recovery_loc = self.utils.get_files_from_dir('temp', save_ext)[0]
+            recovery_loc = self.utils.get_files_from_dir(temp_dir, save_ext)[0]
             with open(recovery_loc, 'rb') as save_rule:
                 rollback_acp = pickle.load(save_rule)
             self.logfmc.debug(f'recovered {recovery_loc} file')
@@ -173,6 +174,15 @@ class FireBroom(FireStick):
         collapsed_rules.drop(columns=['policy_name','source','destination'],inplace=True)
         if comment:
             collapsed_rules['comment'] = comment
+
+        # stop processing if the specified ruleset cant get any smaller
+        if len(collapsed_rules) == len(acp_rules):
+            self.logfmc.error(f'Cannot optimize rule set for {self.rule_prepend_name} as its already optimized')
+            # move old temp to archive
+            archive_dir = self.utils.create_file_path('archive', recovery_fname)
+            replace(recovery_loc, archive_dir)
+            return
+
         # Delete old rules
         self.del_fmc_objects(type_='rule',obj_type='all')
         # send new rules
@@ -212,7 +222,7 @@ class FireBroom(FireStick):
 
 
 if __name__ == "__main__":
-    weeper = FireBroom(access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_1', zone_of_last_resort='outside_zone')
+    weeper = FireBroom(access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone',same_cred=False)
     weeper.collapse_fmc_rules(comment='tester123')
     # augWork.del_fmc_objects(type_='port',obj_type='all')
     # augWork.del_fmc_objects(type_='network',,obj_type='all')

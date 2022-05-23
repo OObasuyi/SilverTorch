@@ -104,10 +104,15 @@ class FireStick:
 
     def retrieve_rule_objects(self):
         acp_id = self.fmc.policy.accesspolicy.get(name=self.access_policy)
-        acp_rules = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id['id'])
+        acp_id = acp_id['id']
+        acp_rules = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id)
         return acp_id, acp_rules
 
     def transform_rulesets(self,ruleset=None,save=False,save_all=False):
+        if save:
+            self.rest_connection()
+            self.fmc_net_port_info()
+
         def flatten(d):
             out = {}
             for key, val in d.items():
@@ -121,11 +126,11 @@ class FireStick:
                     out[key] = val
             return out
         # find existing policy in fmc
-        _, current_ruleset = self.retrieve_rule_objects()
+        acp_id, current_ruleset = self.retrieve_rule_objects()
         current_ruleset = self.utils.transform_acp(current_ruleset,self)
         if len(current_ruleset) < 1:
             self.logfmc.error('nothing in current ruleset')
-            return ruleset
+            return ruleset,None,acp_id
 
         self.logfmc.warning("getting real IPs from named network objects")
         for ip in ['source', 'destination']:
@@ -141,16 +146,24 @@ class FireStick:
         # remove nan values with any
         current_ruleset.fillna(value='any', inplace=True)
         current_ruleset.replace({'None': 'any'}, inplace=True)
+
+        # make sure we are matching by list type and sorting correctly even if its a list object
+        if ruleset is not None:
+            for col in ruleset.columns:
+                ruleset[col] = ruleset[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple, list)) else x)
+        for col in current_ruleset.columns:
+            current_ruleset[col] = current_ruleset[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple, list)) else x)
+
         if ruleset is not None:
             ruleset.fillna(value='any', inplace=True)
         if save:
             if save_all:
-                save_name = self.utils.create_file_path('saved_rules',f'all_{self.access_policy}.csv')
+                save_name = self.utils.create_file_path('saved_rules',f'all_rules_{self.access_policy}.csv')
             else:
-                save_name = self.utils.create_file_path('saved_rules', f'{self.rule_prepend_name}_{self.access_policy}.csv')
+                save_name = self.utils.create_file_path('saved_rules', f'{self.rule_prepend_name}_rules_{self.access_policy}.csv')
             current_ruleset.to_csv(save_name,index=False)
         if ruleset is not None:
-            return ruleset,current_ruleset
+            return ruleset,current_ruleset,acp_id
 
     @staticmethod
     def _ip_address_check(x):
@@ -366,83 +379,82 @@ class FireStick:
                 return sorted(list(set(f"{px[1]}:{px[2]}" for rulep in p for px in self.port_data if rulep == px[0])))
 
     def find_inter_dup_policies(self, ruleset):
-        ruleset, current_ruleset = self.transform_rulesets(ruleset=ruleset)
-        # make sure we are matching by list type and sorting correctly even if its a list object
-        for col in ruleset.columns:
-            ruleset[col] = ruleset[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple, list)) else x)
-        for col in current_ruleset.columns:
-            current_ruleset[col] = current_ruleset[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple, list)) else x)
+        ruleset, current_ruleset,acp_id = self.transform_rulesets(ruleset=ruleset)
 
-        # remove rules that are dups
-        idx_collector = []
-        for i in tqdm(current_ruleset.index, desc='Comparing old ruleset objects to new ones', total=len(current_ruleset.index), colour='yellow'):
-            for idx in ruleset.index:
-                # bug fix for None(any) zone values slipping matching
-                cur_src_z = current_ruleset['src_z'][i] if current_ruleset['src_z'][i] != 'None' else 'any'
-                cur_dst_z = current_ruleset['dst_z'][i] if current_ruleset['dst_z'][i] != 'None' else 'any'
+        if current_ruleset is not None:
+            # remove rules that are dups
+            idx_collector = []
+            for i in tqdm(current_ruleset.index, desc='Comparing old ruleset objects to new ones', total=len(current_ruleset.index), colour='yellow'):
+                for idx in ruleset.index:
+                    # bug fix for None(any) zone values slipping matching
+                    cur_src_z = current_ruleset['src_z'][i] if current_ruleset['src_z'][i] != 'None' else 'any'
+                    cur_dst_z = current_ruleset['dst_z'][i] if current_ruleset['dst_z'][i] != 'None' else 'any'
 
-                cur_src_z = cur_src_z.split('|') if '|' in cur_src_z else cur_src_z
-                cur_dst_z = cur_dst_z.split('|') if '|' in cur_dst_z else cur_dst_z
+                    cur_src_z = cur_src_z.split('|') if '|' in cur_src_z else cur_src_z
+                    cur_dst_z = cur_dst_z.split('|') if '|' in cur_dst_z else cur_dst_z
 
-                # get nested objects
-                cur_real_dst_ip = current_ruleset['real_destination'][i].split('|') if '|' in current_ruleset['real_destination'][i] else current_ruleset['real_destination'][i]
-                cur_real_src_ip = current_ruleset['real_source'][i].split('|') if '|' in current_ruleset['real_source'][i] else current_ruleset['real_source'][i]
-                cur_real_port_ip = current_ruleset['real_port'][i].split('|') if '|' in current_ruleset['real_port'][i] else current_ruleset['real_port'][i]
+                    # get nested objects
+                    cur_real_dst_ip = current_ruleset['real_destination'][i].split('|') if '|' in current_ruleset['real_destination'][i] else current_ruleset['real_destination'][i]
+                    cur_real_src_ip = current_ruleset['real_source'][i].split('|') if '|' in current_ruleset['real_source'][i] else current_ruleset['real_source'][i]
+                    cur_real_port_ip = current_ruleset['real_port'][i].split('|') if '|' in current_ruleset['real_port'][i] else current_ruleset['real_port'][i]
 
-                rs_real_dst_ip = ruleset['real_destination'][idx].split('|') if '|' in ruleset['real_destination'][idx] else ruleset['real_destination'][idx]
-                rs_real_src_ip = ruleset['real_source'][idx].split('|') if '|' in ruleset['real_source'][idx] else ruleset['real_source'][idx]
-                rs_real_port_ip = ruleset['real_port'][idx].split('|') if '|' in ruleset['real_port'][idx] else ruleset['real_port'][idx]
-                # counter if rule exist
-                quondam = 0
-                # ip dest
-                if isinstance(cur_real_dst_ip, list):
-                    sorted(cur_real_dst_ip)
-                    if isinstance(rs_real_dst_ip, list):
-                        sorted(rs_real_dst_ip)
-                        if cur_real_dst_ip == rs_real_dst_ip:
+                    rs_real_dst_ip = ruleset['real_destination'][idx].split('|') if '|' in ruleset['real_destination'][idx] else ruleset['real_destination'][idx]
+                    rs_real_src_ip = ruleset['real_source'][idx].split('|') if '|' in ruleset['real_source'][idx] else ruleset['real_source'][idx]
+                    rs_real_port_ip = ruleset['real_port'][idx].split('|') if '|' in ruleset['real_port'][idx] else ruleset['real_port'][idx]
+                    # counter if rule exist
+                    quondam = 0
+                    # ip dest
+                    if isinstance(cur_real_dst_ip, list):
+                        sorted(cur_real_dst_ip)
+                        if isinstance(rs_real_dst_ip, list):
+                            sorted(rs_real_dst_ip)
+                            if cur_real_dst_ip == rs_real_dst_ip:
+                                quondam += 1
+                        elif rs_real_dst_ip in cur_real_dst_ip:
                             quondam += 1
-                    elif rs_real_dst_ip in cur_real_dst_ip:
+                    elif rs_real_dst_ip == cur_real_dst_ip:
                         quondam += 1
-                elif rs_real_dst_ip == cur_real_dst_ip:
-                    quondam += 1
-                # ip src
-                if isinstance(cur_real_src_ip, list):
-                    sorted(cur_real_dst_ip)
-                    if isinstance(rs_real_src_ip, list):
-                        sorted(rs_real_src_ip)
-                        if cur_real_src_ip == rs_real_src_ip:
+                    # ip src
+                    if isinstance(cur_real_src_ip, list):
+                        sorted(cur_real_dst_ip)
+                        if isinstance(rs_real_src_ip, list):
+                            sorted(rs_real_src_ip)
+                            if cur_real_src_ip == rs_real_src_ip:
+                                quondam += 1
+                        elif rs_real_src_ip in cur_real_src_ip:
                             quondam += 1
-                    elif rs_real_src_ip in cur_real_src_ip:
+                    elif rs_real_src_ip == cur_real_src_ip:
                         quondam += 1
-                elif rs_real_src_ip == cur_real_src_ip:
-                    quondam += 1
-                # port
-                if isinstance(cur_real_port_ip, list):
-                    sorted(cur_real_port_ip)
-                    if isinstance(rs_real_port_ip, list):
-                        sorted(rs_real_port_ip)
-                        if cur_real_port_ip == rs_real_port_ip:
+                    # port
+                    if isinstance(cur_real_port_ip, list):
+                        sorted(cur_real_port_ip)
+                        if isinstance(rs_real_port_ip, list):
+                            sorted(rs_real_port_ip)
+                            if cur_real_port_ip == rs_real_port_ip:
+                                quondam += 1
+                        elif rs_real_port_ip in cur_real_port_ip:
                             quondam += 1
-                    elif rs_real_port_ip in cur_real_port_ip:
+                    elif rs_real_port_ip == cur_real_port_ip:
                         quondam += 1
-                elif rs_real_port_ip == cur_real_port_ip:
-                    quondam += 1
-                # zone
-                if ruleset['source_zone'][idx] == cur_src_z and ruleset['destination_zone'][idx] == cur_dst_z:
-                    quondam += 1
+                    # zone
+                    if ruleset['source_zone'][idx] == cur_src_z and ruleset['destination_zone'][idx] == cur_dst_z:
+                        quondam += 1
 
-                if quondam >= 4:
-                    idx_collector.append(idx)
+                    if quondam >= 4:
+                        idx_collector.append(idx)
 
-        idx_collector = list(set(idx_collector))
-        try:
-            ruleset.drop(idx_collector, inplace=True)
-            ruleset.reset_index(inplace=True, drop=True)
-            self.logfmc.warning(f"{'#' * 3}DROP {len(idx_collector)} DUP RULES{'#' * 3}")
-        except:
-            # no dups to drop
-            pass
-        return ruleset
+            idx_collector = list(set(idx_collector))
+            try:
+                ruleset.drop(idx_collector, inplace=True)
+                ruleset.reset_index(inplace=True, drop=True)
+                self.logfmc.warning(f"{'#' * 3}DROP {len(idx_collector)} DUP RULES{'#' * 3}")
+            except:
+                # no dups to drop
+                pass
+            return ruleset,acp_id
+
+        return ruleset,acp_id
+
 
     def get_zone_from_ip(self, type_, i):
         if self.ippp[type_][i] == 'any':
@@ -498,8 +510,7 @@ class FireStick:
         # if there all the same zone then we got nothing to find dups of
         if ruleset.empty:
             raise Exception('NOTHING IN RULESET THEY MIGHT ALL BE THE SAME ZONE')
-        acp_set = self.fmc.policy.accesspolicy.get(name=self.access_policy)
-        ruleset = self.find_inter_dup_policies(ruleset, acp_set)
+        ruleset,acp_id = self.find_inter_dup_policies(ruleset)
 
         # if we removed all the dups and we have no new rules or for some reason we dont have rules to deploy raise to stop the program
         try:
@@ -562,16 +573,16 @@ class FireStick:
             ruleset[col] = ruleset[col].apply(lambda x: list(v for v in x) if isinstance(x, tuple) else x)
 
         # since we grouped policy find the dups again and get rid of em
-        ruleset = self.find_inter_dup_policies(ruleset, acp_set)
+        ruleset,_ = self.find_inter_dup_policies(ruleset)
         if ruleset.empty:
             self.logfmc.warning('NO RULES TO DEPLOY')
             return
 
         # real cols are for function lookup use
         ruleset = ruleset.loc[:, ~ruleset.columns.str.startswith('real')]
-        return ruleset,acp_set
+        return ruleset,acp_id
 
-    def deploy_rules(self,new_rules,current_acp_rules):
+    def deploy_rules(self,new_rules,current_acp_rules_id):
         def fix_object(x):
             try:
                 x = x[0]
@@ -714,7 +725,7 @@ class FireStick:
             charity_policy.append(rule_form)
 
         try:
-            res = self.fmc.policy.accesspolicy.accessrule.create(data=charity_policy, container_uuid=current_acp_rules['id'], category='automation_engine', )
+            res = self.fmc.policy.accesspolicy.accessrule.create(data=charity_policy, container_uuid=current_acp_rules_id, category='automation_engine', )
             self._creation_check(res, charity_policy)
             self.logfmc.warning(f'{"#" * 5}RULES PUSHED SUCCESSFULLY{"#" * 5}')
             return True
@@ -744,7 +755,7 @@ class FireStick:
             # create FMC rules
             ruleset,acp_set = self.create_acp_rule()
             # deploy rules
-            successful = self.deploy_rules(new_rules=ruleset,current_acp_rules=acp_set)
+            successful = self.deploy_rules(new_rules=ruleset, current_acp_rules_id=acp_set)
             if successful:
                 # test rule Checkup
                 ffc.compare_ippp_acp()
@@ -779,6 +790,7 @@ class FireStick:
 if __name__ == "__main__":
     augWork = FireStick(ippp_location='gfrs.csv', access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone', same_cred=False, cred_file='cF.json')
     augWork.policy_deployment_flow(checkup=True)
+    # augWork.transform_rulesets(save_all=True,save=True)
     # augWork.rest_connection()
     # augWork.del_fmc_objects(type_='port',where='all',obj_type='all')
     # augWork.del_fmc_objects(type_='network',where='all',obj_type='all')
