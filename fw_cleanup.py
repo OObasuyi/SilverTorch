@@ -11,9 +11,6 @@ from fw_test import FireCheck
 class FireBroom(FireStick):
     def __init__(self, fmc_host: str, ftd_host: str, access_policy: str, rule_prepend_name: str,
             zone_of_last_resort: str, same_cred=False, ruleset_type='ALLOW',domain='Global'):
-        ippp_location = None
-        # todo: testing
-        cred_file = 'cF.json'
         super().__init__(fmc_host, ftd_host, ippp_location, access_policy, rule_prepend_name,
                          zone_of_last_resort,same_cred=same_cred, cred_file=cred_file,ruleset_type=ruleset_type,domain=domain)
         self.rest_connection()
