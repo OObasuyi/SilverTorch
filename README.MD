@@ -1,5 +1,5 @@
 # FirePyower (AKA SilverTorch) 
-This script stages rules into the FMC. It also inserts rules based on their Zone to create an automated Zone Based firewall.
+This script stages rules into the FMC. It also inserts rules based on their Zone to create an automated Zone Based firewall. This script also can help clean up firewall rules if needed
 
 ## As Palpatine would say *DO IT*
 1. get CSV
@@ -39,26 +39,30 @@ augWork.policy_deployment_flow()
 ```
 ### Command line interface
 ```console
-user@machine:~/SilverTorch$ python3 terminal_entry.py -fmc_host 10.11.6.60 -ftd_host 10.11.6.191 -ippp_location gfrs.csv -access_policy test_acp -zolr outside_zone
+user@machine:~/SilverTorch$ python3 terminal_entry.py -fmc_host 10.11.6.60 -ftd_host 10.11.6.191 -ippp_location gfrs.csv -access_policy test_acp -zolr outside_zone -rule_prepend_name VOIP
 ```
 ### console options
 ```console
 SilverTorch Mandatory Fields:
   -fmc_host FMC_HOST
   -ftd_host FTD_HOST
-  -ippp_location ippp_LOCATION
+  -ippp_location IPPP_LOCATION
   -access_policy ACCESS_POLICY
   -rule_prepend_name RULE_PREPEND_NAME
-  -zolr ZOLR            zone of last resort
+  -zolr ZOLR          zone of last resort
 
 SilverTorch Optional Fields:
- --ippp_checkup IPPP_CHECKUP Check whether the IPPP is found in the ACP
+  --ippp_checkup IPPP_CHECKUP Check whether the IPPP is found in the ACP
+  --rule_cleanup RULE_CLEANUP Clean ACP rules
   --domain DOMAIN
   --zbr_bypass ZBR_BYPASS
   --cred_file CRED_FILE
   --same_creds SAME_CREDS True or False/case-sensitive
   --ruleset_type RULESET_TYPE ALLOW OR DENY TYPE OF RULESET
 
+SilverTorch Rule Cleanup Fields:
+  --comment COMMENT     comment to leave collapsed/combined rule
+  --recovery_mode RECOVERY_MODE recover old ACP file if the program crashed
 ```
 ## CAT-FAQs
 1. **Q. Well how does this deal with rule deduplication????**  
