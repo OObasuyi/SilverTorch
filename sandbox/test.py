@@ -23,7 +23,7 @@ def gen_half_way_ippp():
     ports = [randint(10 ,55556) for _ in src]
     external_check = [choice(['Y' ,''] )for _ in src]
     dst = dst[:len(src)]
-    dict_pd = {'source' :src ,'destination' :dst ,'port' :ports ,'external' :external_check ,'ticket_id': 'tck87457'}
+    dict_pd = {'source' :src ,'destination' :dst ,'port' :ports ,'external' :external_check ,'comments': 'tck87457'}
     data_temp = pd.DataFrame.from_dict(dict_pd)
     data_temp.to_csv('dump_test_new.csv')
 
@@ -37,7 +37,7 @@ def gen_fake_rule_set(amount_of_rules=300,upload=False):
         tckt_ip_info = ["test_run" for _ in range(1, amount_of_rules)]
         shuffle(src_ip_info)
         shuffle(dest_ip_info)
-        gfrs_pd = {'source':src_ip_info,'destination' :dest_ip_info,'port_1':port_info,'port_2':port_info,'protocol':proto_info,'ticket_id':tckt_ip_info}
+        gfrs_pd = {'source':src_ip_info,'destination' :dest_ip_info,'port_range_low':port_info,'port_range_high':port_info,'protocol':proto_info,'comments':tckt_ip_info}
         gfrs_pd = pd.DataFrame.from_dict(gfrs_pd)
         gfrs_pd.to_csv('gfrs.csv',index=False)
 
