@@ -209,30 +209,30 @@ class FireStick:
 
     def create_fmc_object_names(self):
         # drop trailing decimal point from str conversion
-        self.ippp['port_1'] = self.ippp['port_1'].apply(lambda x: x.split('.')[0])
-        self.ippp['port_2'] = self.ippp['port_2'].apply(lambda x: x.split('.')[0])
+        self.ippp['port_range_low'] = self.ippp['port_range_low'].apply(lambda x: x.split('.')[0])
+        self.ippp['port_range_high'] = self.ippp['port_range_high'].apply(lambda x: x.split('.')[0])
         # take care range ports
         self.ippp['port'] = 0
 
         for i in self.ippp.index:
             # catch any any clause
-            if self.ippp['port_1'][i] in ['nan', '0', '65535', 'any'] and self.ippp['port_2'][i] in ['nan', '0', '65535', 'any']:
-                self.ippp['port_2'][i] = self.ippp['port_1'][i] = 'any'
-            elif self.ippp['port_2'][i] in ['nan', '0', '65535', 'any'] and self.ippp['port_1'][i] in ['nan', '0', '65535', 'any']:
-                self.ippp['port_2'][i] = self.ippp['port_1'][i] = self.ippp['port_2'][i] = 'any'
+            if self.ippp['port_range_low'][i] in ['nan', '0', '65535', 'any'] and self.ippp['port_range_high'][i] in ['nan', '0', '65535', 'any']:
+                self.ippp['port_range_high'][i] = self.ippp['port_range_low'][i] = 'any'
+            elif self.ippp['port_range_high'][i] in ['nan', '0', '65535', 'any'] and self.ippp['port_range_low'][i] in ['nan', '0', '65535', 'any']:
+                self.ippp['port_range_high'][i] = self.ippp['port_range_low'][i] = self.ippp['port_range_high'][i] = 'any'
             # if the rows has nothing in the adjacent col copy from the other row. (this avoids nan bug)
-            if self.ippp['port_2'][i] in ['nan']:
-                self.ippp['port_2'][i] = self.ippp['port_1'][i]
-            elif self.ippp['port_1'][i] in ['nan']:
-                self.ippp['port_1'][i] = self.ippp['port_2'][i]
+            if self.ippp['port_range_high'][i] in ['nan']:
+                self.ippp['port_range_high'][i] = self.ippp['port_range_low'][i]
+            elif self.ippp['port_range_low'][i] in ['nan']:
+                self.ippp['port_range_low'][i] = self.ippp['port_range_high'][i]
             # if port is a range append range symbol
-            if self.ippp['port_1'][i] != self.ippp['port_2'][i]:
-                self.ippp['port'].loc[i] = self.ippp['port_1'][i] + '-' + self.ippp['port_2'][i]
+            if self.ippp['port_range_low'][i] != self.ippp['port_range_high'][i]:
+                self.ippp['port'].loc[i] = self.ippp['port_range_low'][i] + '-' + self.ippp['port_range_high'][i]
             else:
-                self.ippp['port'].loc[i] = self.ippp['port_1'][i]
+                self.ippp['port'].loc[i] = self.ippp['port_range_low'][i]
         # take care of the random chars in protocol col ( we can only use TCP/UDP for its endpoint soo..
         self.ippp['protocol'] = self.ippp['protocol'].astype(str).apply(lambda x: x.strip()[:3])
-        self.ippp.drop(columns=['port_1', 'port_2'], inplace=True)
+        self.ippp.drop(columns=['port_range_low', 'port_range_high'], inplace=True)
 
         for type_ in tqdm(['source', 'destination', 'port'], desc=f'creating new objects or checking if it exist.', total=3, colour='MAGENTA'):
             # whether we need to create an obj placeholder
@@ -503,7 +503,7 @@ class FireStick:
             rule_flow.update(src_flow)
             rule_flow.update(dst_flow)
             rule_flow.update({'port': self.ippp['fmc_name_port'][i] if self.ippp['port'][i] != 'any' else 'any'})
-            rule_flow.update({'comment': self.ippp['ticket_id'][i]})
+            rule_flow.update({'comment': self.ippp['comments'][i]})
             ruleset.append(rule_flow)
 
         ruleset = pd.DataFrame(ruleset)

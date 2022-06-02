@@ -3,7 +3,7 @@ This script stages rules into the FMC. It also inserts rules based on their Zone
 
 ## As Palpatine would say *DO IT*
 ### Pre-requisites for deploying rules to the firewall
-* The ruleset files must use the same template as  "acl_ingest_templete.csv" in the examples folder.
+* The ruleset files must use the same template as  "acl_ingest_templete.csv" in the templates folder.
 
 ### Deploy Rules Workflow (DRW)
 1. import IPPP file
