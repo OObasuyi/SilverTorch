@@ -193,7 +193,7 @@ class FireStick:
         # check if we have acceptable protocol for the API
         na_protos = ippp[~ippp['protocol'].str.contains('TCP|UDP', regex=True)]
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
-        fpath = self.utils.create_file_path('CNI', f'non_applicable_protocols_{dt_now}.csv')
+        fpath = self.utils.create_file_path('CNI', f'{self.rule_prepend_name}_non_applicable_protocols_{dt_now}.csv')
         if not na_protos.empty:
             self.logfmc.warning(f'found protocols that cannot be used with this script\n Please enter them manually\n file location: {fpath}')
             # make sure the user sees the msg with no input.
@@ -201,11 +201,35 @@ class FireStick:
             na_protos.to_csv(fpath, index=False)
         ippp = ippp[ippp['protocol'].str.contains('TCP|UDP', regex=True)]
         # remove non-alphanumeric chars from str if protocol take udp or tcp from str
-        for col in ['service', 'protocol']:
-            ippp[col] = ippp[col].apply(lambda x: sub('[^0-9a-zA-Z]+', '_', x))
-            if col == 'protocol':
-                ippp[col] = ippp[col].apply(lambda x: [i.split()[0] for i in x.split('_') if i == 'TCP' or i == 'UDP'][0])
+        for col in ['service', 'protocol','port_range_low','port_range_high']:
+            if col in ['service', 'protocol']:
+                ippp[col] = ippp[col].apply(lambda x: sub('[^0-9a-zA-Z]+', '_', x))
+                if col == 'protocol':
+                    ippp[col] = ippp[col].apply(lambda x: [i.split()[0] for i in x.split('_') if i == 'TCP' or i == 'UDP'][0])
+            # remove trailing zero from float -> str convert
+            elif col in ['port_range_low','port_range_high']:
+                ippp[col] = ippp[col].apply(lambda x: x.split('.0')[0] if x != 'nan' else x)
         return ippp
+
+    def ippp_fixing(self):
+        fixing_holder = []
+        service_grouping = self.ippp.groupby(['service'])
+        sg_listing = service_grouping.size()[service_grouping.size() > 1].index.values.tolist()
+        for gl in sg_listing:
+            group = service_grouping.get_group(gl)
+            # check if we have inconsistent port-to-service matching
+            have_dup = group[['service', 'port_range_low', 'port_range_high']].drop_duplicates()
+            if have_dup.shape[0] >= 2:
+                fixing_holder.append(have_dup.to_dict('r'))
+        if len(fixing_holder) > 0:
+            # un-nest list
+            fixing_holder = [l2 for l1 in fixing_holder for l2 in l1]
+            dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
+            fname = self.utils.create_file_path('CNI',f'{self.rule_prepend_name}_port_to_service_mismatch_{dt_now}.csv')
+            pd.DataFrame(fixing_holder).to_csv(fname,index=False)
+            self.logfmc.critical('Please Check IPPP for inconsistencies.. found multiple services matching to varying ports')
+            self.logfmc.critical(f'mismatched items saved to {fname}')
+            raise NotImplementedError('placeholder for next update')
 
     def create_fmc_object_names(self):
         # drop trailing decimal point from str conversion
@@ -454,7 +478,6 @@ class FireStick:
             return ruleset,acp_id
 
         return ruleset,acp_id
-
 
     def get_zone_from_ip(self, type_, i):
         if self.ippp[type_][i] == 'any':
@@ -744,6 +767,9 @@ class FireStick:
         self.fmc_net_port_info()
         # pull information from ippp
         self.ippp = self.retrieve_ippp()
+        if not checkup:
+            # check ippp values
+            self.ippp = self.ippp_fixing()
         # create FMC objects
         self.create_fmc_object_names()
         # restart conn
@@ -789,7 +815,7 @@ class FireStick:
 
 if __name__ == "__main__":
     augWork = FireStick(ippp_location='gfrs.csv', access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone', same_cred=False, cred_file='cF.json')
-    augWork.policy_deployment_flow(checkup=True)
+    augWork.policy_deployment_flow()
     # augWork.transform_rulesets(save_all=True,save=True)
     # augWork.rest_connection()
     # augWork.del_fmc_objects(type_='port',where='all',obj_type='all')
