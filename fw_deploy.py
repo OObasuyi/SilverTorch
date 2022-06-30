@@ -211,14 +211,14 @@ class FireStick:
                 ippp[col] = ippp[col].apply(lambda x: x.split('.0')[0] if x != 'nan' else x)
         return ippp
 
-    def ippp_fixing(self):
+    def find_dup_services(self):
         fixing_holder = []
         service_grouping = self.ippp.groupby(['service'])
         sg_listing = service_grouping.size()[service_grouping.size() > 1].index.values.tolist()
         for gl in sg_listing:
             group = service_grouping.get_group(gl)
             # check if we have inconsistent port-to-service matching
-            have_dup = group[['service', 'port_range_low', 'port_range_high']].drop_duplicates()
+            have_dup = group[['service', 'port']].drop_duplicates()
             if have_dup.shape[0] >= 2:
                 fixing_holder.append(have_dup.to_dict('r'))
         if len(fixing_holder) > 0:
@@ -231,13 +231,12 @@ class FireStick:
             self.logfmc.critical(f'mismatched items saved to {fname}')
             raise NotImplementedError('placeholder for next update')
 
-    def create_fmc_object_names(self):
+    def fix_port_range_objects(self):
         # drop trailing decimal point from str conversion
         self.ippp['port_range_low'] = self.ippp['port_range_low'].apply(lambda x: x.split('.')[0])
         self.ippp['port_range_high'] = self.ippp['port_range_high'].apply(lambda x: x.split('.')[0])
         # take care range ports
         self.ippp['port'] = 0
-
         for i in self.ippp.index:
             # catch any any clause
             if self.ippp['port_range_low'][i] in ['nan', '0', '65535', 'any'] and self.ippp['port_range_high'][i] in ['nan', '0', '65535', 'any']:
@@ -258,6 +257,7 @@ class FireStick:
         self.ippp['protocol'] = self.ippp['protocol'].astype(str).apply(lambda x: x.strip()[:3])
         self.ippp.drop(columns=['port_range_low', 'port_range_high'], inplace=True)
 
+    def create_fmc_object_names(self):
         for type_ in tqdm(['source', 'destination', 'port'], desc=f'creating new objects or checking if it exist.', total=3, colour='MAGENTA'):
             # whether we need to create an obj placeholder
             self.ippp[f'fmc_name_{type_}_install'] = True
@@ -767,9 +767,10 @@ class FireStick:
         self.fmc_net_port_info()
         # pull information from ippp
         self.ippp = self.retrieve_ippp()
+        self.fix_port_range_objects()
         if not checkup:
-            # check ippp values
-            self.ippp = self.ippp_fixing()
+            # check ippp service values for uniqueness
+            self.find_dup_services()
         # create FMC objects
         self.create_fmc_object_names()
         # restart conn
