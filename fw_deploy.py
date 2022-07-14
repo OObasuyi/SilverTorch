@@ -708,10 +708,12 @@ class FireStick:
             rule_form = deepcopy(temp_form)
             rule_form['name'] = f"{self.rule_prepend_name}_{take_num}"
             take_num += 1
-
+            
+            #strip net group to get only name for comparision
+            striped_group_name = [i[0] for i in self.net_group_object]
             for srcdest_net in ['source', 'destination']:
                 if 'any' != rule[f'{srcdest_net}_network']:
-                    if '_NetGroup_' in rule[f'{srcdest_net}_network'] or '_net_group_' in rule[f'{srcdest_net}_network']:
+                    if '_NetGroup_' in rule[f'{srcdest_net}_network'] or '_net_group_' in rule[f'{srcdest_net}_network'] or rule[f'{srcdest_net}_network'] in striped_group_name:
                         # update npi if we created a grouped policy
                         self.fmc_net_port_info()
                         rule_form[f'{srcdest_net}Networks'] = {'objects': fix_object(self.fmc.object.networkgroup.get(name=rule[f'{srcdest_net}_network']))}
