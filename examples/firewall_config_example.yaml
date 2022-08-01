@@ -1,0 +1,36 @@
+#### CONFIG FILE FOR SilverTorch V0.1 ####
+firewall_type: firepower
+
+# can be set to None if the device IS NOT MANAGED from a central controller
+management_center: 10.11.6.60
+
+#/ the following is needed for firepower suite
+access_policy: test_acp
+domain: Global
+#\
+
+# the firewall to make routing and interface reference from FOR now a sample of ONE is supported.
+firewall_sensor: 10.11.6.191
+# when pushing a config this will be prepended to the new rules, \
+# in addition if other functions such as cleanup or checkup is used it will find rules in the ruleset with this specific \
+# name in the rule name BUT *BE AS CONCISE AS POSSIBLE.*
+rule_prepend_name: test
+# if there is not a routing entry for a specific IP in the IPPP then use this zone to set its zone in the ruleset.
+zone_of_last_resort: outside_zone
+
+ippp_location: gfrs.csv
+# if don't want to use the routing information from the firewall, and you have already a IP-to-ZONE matrix insert the file name.
+zone_based_routing_bypass: false
+# whether the controller and the firewall/sensor uses the same creds.
+same_creds: true
+# CAN ONLY BE ALLOW OR DENY
+ruleset_type: ALLOW
+rule_comment: None
+
+# check to see if IPPP exist in the firewalls ruleset
+ippp_checkup: false
+# if there are rules that you want to collapse/reorganize for firewall scaffolding.
+rule_cleanup: false
+# emergency switch in case something happens(network/power drop) in rule cleanup module since it involved rearranges the firewall configs.
+# this switch will reinstall the ACP ruleset that were modified.
+recovery_mode: false

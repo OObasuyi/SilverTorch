@@ -709,7 +709,7 @@ class FireStick:
             rule_form['name'] = f"{self.rule_prepend_name}_{take_num}"
             take_num += 1
             
-            #strip net group to get only name for comparision
+            # strip net group to get only name for comparision
             striped_group_name = [i[0] for i in self.net_group_object]
             for srcdest_net in ['source', 'destination']:
                 if 'any' != rule[f'{srcdest_net}_network']:
