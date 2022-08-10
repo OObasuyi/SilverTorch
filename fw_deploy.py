@@ -23,7 +23,7 @@ class FireStick:
     def __init__(self, fmc_host:str, ftd_host:str,ippp_location,
             access_policy:str, rule_prepend_name:str,zone_of_last_resort:str,
             zbr_bypass: dict = None,same_cred=True, ruleset_type='ALLOW',
-            cred_file: str = None,domain='Global'):
+            cred_file: str = None,domain='Global',**kwargs):
         """
         @param cred_file: JSON file hosting user/pass information DEPRECATED
         @param fmc_host: FMC domain or IP address
@@ -61,6 +61,8 @@ class FireStick:
         self.zone_of_last_resort = zone_of_last_resort
         self.ruleset_type = ruleset_type.upper()
         self.logfmc = log_collector()
+        # optional passing commands
+        self.pass_thru_commands = kwargs
 
     def _creation_check(self, response, new_obj, output=True):
         if response.status_code != 201:
@@ -779,7 +781,11 @@ class FireStick:
         self.rest_connection(reset=True)
         ffc = FireCheck(self)
         if checkup:
-            ffc.compare_ippp_acp()
+            if 'strict_checkup' in self.pass_thru_commands:
+                if self.pass_thru_commands.get('strict_checkup'):
+                    ffc.compare_ippp_acp(strict_checkup=True)
+            else:
+                ffc.compare_ippp_acp()
         else:
             # create FMC rules
             ruleset,acp_set = self.create_acp_rule()
@@ -815,12 +821,3 @@ class FireStick:
         cdict = {"fmc_username": fmc_u, "fmc_password": fmc_p, "ftd_username": ftd_u, "ftd_password": ftd_p}
         return cdict
 
-
-if __name__ == "__main__":
-    augWork = FireStick(ippp_location='gfrs.csv', access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone', same_cred=False, cred_file='cF.json')
-    augWork.policy_deployment_flow()
-    # augWork.transform_rulesets(save_all=True,save=True)
-    # augWork.rest_connection()
-    # augWork.del_fmc_objects(type_='port',where='all',obj_type='all')
-    # augWork.del_fmc_objects(type_='network',where='all',obj_type='all')
-    # augWork.del_fmc_objects(type_='network',where='all',obj_type='all')

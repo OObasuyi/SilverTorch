@@ -33,7 +33,7 @@ class FireCheck:
         test_ippp = pd.DataFrame(ruleset)
         return test_ippp
     
-    def compare_ippp_acp(self,fix_ippp=True):
+    def compare_ippp_acp(self,fix_ippp=True,strict_checkup=False):
         if fix_ippp:
             test_ippp = self._fix_ippp_data()
         else:
@@ -42,7 +42,7 @@ class FireCheck:
         acp_id = self.copy_class.fmc.policy.accesspolicy.get(name=self.copy_class.access_policy)
         acp_rules = self.copy_class.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id['id'])
         acp_rules = self.copy_class.utils.transform_acp(acp_rules, self.copy_class)
-
+        # todo: need to get REAL port from IPPP to compare on strict
         for col in test_ippp.columns:
             test_ippp[col] = test_ippp[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple, list)) else x)
         for col in acp_rules.columns:
@@ -67,6 +67,8 @@ class FireCheck:
                 cur_dst_z = current_rule['dst_z']
                 cur_port = current_rule['port']
                 cr_list = [cur_dst_ip,cur_src_ip,cur_src_z,cur_dst_z,cur_port]
+                if strict_checkup:
+                    cr_list.append(current_rule['real_port'])
 
                 test_dst_ip = test_rule['destination_network']
                 test_src_ip = test_rule['source_network']
