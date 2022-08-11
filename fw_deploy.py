@@ -781,9 +781,11 @@ class FireStick:
         self.rest_connection(reset=True)
         ffc = FireCheck(self)
         if checkup:
-            if 'strict_checkup' in self.pass_thru_commands:
-                if self.pass_thru_commands.get('strict_checkup'):
-                    ffc.compare_ippp_acp(strict_checkup=True)
+            if 'strict_checkup' in self.pass_thru_commands and self.pass_thru_commands.get('strict_checkup'):
+                literal_ippp = self.ippp.copy()
+                literal_ippp['port'] = literal_ippp['protocol'] + ':' + literal_ippp['port']
+                self.ippp = literal_ippp
+                ffc.compare_ippp_acp(strict_checkup=True)
             else:
                 ffc.compare_ippp_acp()
         else:

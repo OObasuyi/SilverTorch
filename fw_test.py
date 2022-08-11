@@ -3,7 +3,9 @@ from ipaddress import ip_network
 from datetime import datetime
 from tqdm import tqdm
 
+
 class FireCheck:
+
     def __init__(self,af_class):
         self.copy_class = af_class
         self.logfmc = self.copy_class.logfmc
@@ -28,6 +30,7 @@ class FireCheck:
             rule_flow.update(src_flow)
             rule_flow.update(dst_flow)
             rule_flow.update({'port': test_ippp['port'][i] if test_ippp['port'][i] != 'any' else 'any'})
+
             ruleset.append(rule_flow)
         self.logfmc.warning(f'Dropped {same_zone_counter} rules from the IPPP which are the same zone')
         test_ippp = pd.DataFrame(ruleset)
@@ -65,10 +68,11 @@ class FireCheck:
                 cur_src_ip = current_rule['source']
                 cur_src_z = current_rule['src_z']
                 cur_dst_z = current_rule['dst_z']
-                cur_port = current_rule['port']
-                cr_list = [cur_dst_ip,cur_src_ip,cur_src_z,cur_dst_z,cur_port]
                 if strict_checkup:
-                    cr_list.append(current_rule['real_port'])
+                    cur_port = current_rule['real_port']
+                else:
+                    cur_port = current_rule['port']
+                cr_list = [cur_dst_ip,cur_src_ip,cur_src_z,cur_dst_z,cur_port]
 
                 test_dst_ip = test_rule['destination_network']
                 test_src_ip = test_rule['source_network']
