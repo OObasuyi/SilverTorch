@@ -130,7 +130,7 @@ class Util:
             subset_rule['source'] = self_instance.find_nested_group_objects(i.get('sourceNetworks'))
             subset_rule['destination'] = self_instance.find_nested_group_objects(i.get('destinationNetworks'))
             subset_rule['port'] = self_instance.find_nested_group_objects(i.get('destinationPorts'))
-            if 'strict_checkup' in self_instance.pass_thru_commands:
+            if 'strict_checkup' in self_instance.pass_thru_commands and self_instance.pass_thru_commands.get('strict_checkup'):
                 if i.get('destinationPorts')['objects'][0]['type'] == 'ProtocolPortObject':
                     for port_item in self_instance.port_data:
                         if port_item[0] == i.get('destinationPorts')['objects'][0]['name']:
