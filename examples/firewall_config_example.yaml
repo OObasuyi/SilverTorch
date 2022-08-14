@@ -1,4 +1,5 @@
 #### CONFIG FILE FOR SilverTorch V0.1 ####
+# All Configuration KEYS MUST be filled FOR NOW
 
 # can be firepower only right now. Palo_Alto will be coming in further releases if possible :)
 firewall_type: firepower
@@ -36,4 +37,5 @@ ippp_checkup: false
 rule_cleanup: false
 # emergency switch in case something happened(network/power drop) in rule cleanup module since it involved rearranges the firewall configs.
 # this switch will reinstall the ACP ruleset that were modified.
+# recover old ACP file if the program crashed
 recovery_mode: false
