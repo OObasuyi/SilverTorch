@@ -4,6 +4,7 @@ This script stages rules into the FMC. It also inserts rules based on their Zone
 ## As Palpatine would say *DO IT*
 ### Pre-requisites for deploying rules to the firewall
 * The ruleset files must use the same template as  "acl_ingest_templete.csv" in the templates folder.
+* the deployment configuration YAML file must be filled using the template "firewall_config_template.yaml" 
 
 ### Deploy Rules Workflow (DRW)
 1. import IPPP file
@@ -32,15 +33,13 @@ This script stages rules into the FMC. It also inserts rules based on their Zone
 2. <= 7.0 ver of FMC API only allows TCP or UDP for protocols to used.
 
 ## Special Cases
-1. if you have new ip information and dont want to use the fastpath info to find the correct zone to put the IP, the zbr_bypass argument MUST match the row lines of the PPS rows
+1. if you have new ip information and don't want to use the fastpath info to find the correct zone to put the IP, the zbr_bypass argument MUST match the row lines of the PPS rows
 2. any IP that doesn't have a fastpath match can have a zone assigned to it using the zone_of_last_resort argument
 
-## Main Dependencies
-pandas \
-netmiko \
-tqdm \
-fireREST\
-OObasuyi/paramiko (for FIPS compliance)
+## Optional Dependencies
+There is one separate dependency that may be needed if you have FIPS enabled since paramiko has not incorporated this in its code it is:
+1. OObasuyi/paramiko (for FIPS compliance)
+
 # Quick start
 ## Calling the function directly examples
 
@@ -73,30 +72,16 @@ augWork.policy_deployment_flow(checkup=True)
 
 ### Command line interface
 ```console
-user@machine:~/SilverTorch$ python3 terminal_entry.py -fmc_host 10.11.6.60 -ftd_host 10.11.6.191 -ippp_location gfrs.csv -access_policy test_acp -zolr outside_zone -rule_prepend_name VOIP
+user@machine:~/SilverTorch$ python3 terminal_entry.py -config_file firepower_configs.yaml
 ```
 ### console options
 ```console
 SilverTorch Mandatory Fields:
-  -fmc_host FMC_HOST
-  -ftd_host FTD_HOST
-  -ippp_location IPPP_LOCATION
-  -access_policy ACCESS_POLICY
-  -rule_prepend_name RULE_PREPEND_NAME
-  -zolr ZOLR          zone of last resort
+   -config_file YAML config file for SilverTorch
 
 SilverTorch Optional Fields:
-  --ippp_checkup IPPP_CHECKUP Check whether the IPPP is found in the ACP
-  --rule_cleanup RULE_CLEANUP Clean ACP rules
-  --domain DOMAIN
-  --zbr_bypass ZBR_BYPASS
   --cred_file CRED_FILE
-  --same_creds SAME_CREDS True or False/case-sensitive
-  --ruleset_type RULESET_TYPE ALLOW OR DENY TYPE OF RULESET
 
-SilverTorch Rule Cleanup Fields:
-  --comment COMMENT     comment to leave collapsed/combined rule
-  --recovery_mode RECOVERY_MODE recover old ACP file if the program crashed
 ```
 ## CAT-FAQs
 1. **Q. Well how does this deal with rule deduplication????**  

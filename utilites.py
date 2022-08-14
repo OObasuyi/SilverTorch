@@ -5,6 +5,7 @@ from json import load, dump
 from logging.handlers import TimedRotatingFileHandler
 from os import path, makedirs, replace,rename, remove,walk
 import pandas as pd
+import yaml
 
 TOP_DIR = path.dirname(path.abspath(__file__))
 
@@ -27,7 +28,7 @@ class Util:
     @staticmethod
     def create_file_path(folder:str,file_name:str):
         TOP_DIR = path.dirname(path.abspath(__file__))
-        allowed_exts = ['csv','log','txt','json','rulbk']
+        allowed_exts = ['csv','log','txt','json','rulbk','yaml']
 
         input_ext = '.'.join(file_name.split(".")[1:])
         if input_ext.lower() not in allowed_exts:
@@ -130,6 +131,17 @@ class Util:
             subset_rule['source'] = self_instance.find_nested_group_objects(i.get('sourceNetworks'))
             subset_rule['destination'] = self_instance.find_nested_group_objects(i.get('destinationNetworks'))
             subset_rule['port'] = self_instance.find_nested_group_objects(i.get('destinationPorts'))
+            if 'strict_checkup' in self_instance.pass_thru_commands and self_instance.pass_thru_commands.get('strict_checkup'):
+                if i.get('destinationPorts')['objects'][0]['type'] == 'ProtocolPortObject':
+                    for port_item in self_instance.port_data:
+                        if port_item[0] == i.get('destinationPorts')['objects'][0]['name']:
+                            subset_rule['real_port'] = [f'{port_item[1]}:{port_item[2]}']
+                elif i.get('destinationPorts')['objects'][0]['type'] == 'PortObjectGroup':
+                    for port_item in self_instance.port_group_object:
+                        if port_item[0] == i.get('destinationPorts')['objects'][0]['name']:
+                            # recurvsly look through the port objects for its names and get real port mapping from the port_data,
+                            subset_rule['real_port'] = [f'{port_item[1]}:{port_item[2]}' for port_list_item in port_item[1] for port_item in self_instance.port_data if port_item[0] == port_list_item[0]]
+
             changed_ruleset.append(subset_rule)
         current_ruleset = changed_ruleset
         return pd.DataFrame(current_ruleset)
@@ -139,6 +151,17 @@ class Util:
         dir_path = path.join(TOP_DIR, folder)
         _, _, filenames = next(walk(dir_path))
         return [path.join(dir_path, file) for file in filenames if file.endswith(look_for_ext)]
+
+    @staticmethod
+    def open_yaml_files(file_name):
+        with open(file_name, "r") as stream:
+            try:
+                return yaml.safe_load(stream)
+            except yaml.YAMLError as yaml_error:
+                logc = log_collector()
+                logc.error(f'ERROR READ FILE: {file_name}. PLEASE ENSURE YOUR ARE USING THE CORRECT YAML FORMAT.')
+                logc.error(yaml_error)
+
 
 def deprecated(func):
     fname = func.__name__

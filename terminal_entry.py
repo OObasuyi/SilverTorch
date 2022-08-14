@@ -2,46 +2,40 @@ from argparse import ArgumentParser
 
 from fw_cleanup import FireBroom
 from fw_deploy import FireStick
+from utilites import Util
 
 
 def terminal_entry():
-
-    parser = ArgumentParser(prog='FirePyower')
+    parser = ArgumentParser(prog='SilverTorch Configuration Management')
     mandatory_args = parser.add_argument_group(title='SilverTorch Mandatory Fields')
-    mandatory_args.add_argument('-fmc_host',required=True,type=str)
-    mandatory_args.add_argument('-ftd_host',required=True,type=str)
-    mandatory_args.add_argument('-access_policy',required=True,type=str)
-    mandatory_args.add_argument('-rule_prepend_name',required=True,type=str)
-    mandatory_args.add_argument('-zolr',help='zone of last resort', required=True,type=str)
+    mandatory_args.add_argument('-config_file', help='YAML config file for SilverTorch', required=True, type=str)
 
     optional_args = parser.add_argument_group(title='SilverTorch Optional Fields')
-    mandatory_args.add_argument('--ippp_location',default=None,type=str)
-    optional_args.add_argument('--ippp_checkup',default=False, help='Check whether the IPPP is found in the ACP', type=bool)
-    optional_args.add_argument('--rule_cleanup',default=False, help='Clean ACP rules', type=bool)
-    optional_args.add_argument('--domain',default='Global',action="store",type=str)
-    optional_args.add_argument('--zbr_bypass',default=None,action="store",type=str)
     optional_args.add_argument('--cred_file', default=None, type=str)
-    optional_args.add_argument('--same_creds', default=True,help='True or False/case-sensitive', type=bool)
-    optional_args.add_argument('--ruleset_type', default='ALLOW',help='ALLOW OR DENY TYPE OF RULESET', type=str)
-
-    optional_args = parser.add_argument_group(title='SilverTorch Rule Cleanup Fields')
-    optional_args.add_argument('--comment', default=False, help='comment to leave collapsed/combined rule', type=str)
-    optional_args.add_argument('--recovery_mode', default=False, help='recover old ACP file if the program crashed', type=bool)
 
     args = parser.parse_args()
+    util = Util()
+    config_file = util.create_file_path(folder='SilverConfigs', file_name=args.config_file)
+    config_file = util.open_yaml_files(config_file)
+
     # handle optional None input
-    args.zbr_bypass = args.zbr_bypass if args.zbr_bypass else None
-    if args.ruleset_type not in ['ALLOW','DENY']:
+    zbr_bypass = config_file.get('zone_based_routing_bypass') if config_file.get('zone_based_routing_bypass') else None
+    if config_file.get('ruleset_type') not in ['ALLOW', 'DENY']:
         raise ValueError('RuleSet_type must be either allow or deny')
 
-    if args.rule_cleanup:
-        fb = FireBroom(access_policy=args.access_policy, ftd_host=args.ftd_host, fmc_host=args.fmc_host, rule_prepend_name=args.rule_prepend_name, zone_of_last_resort=args.zolr, same_cred=args.same_creds)
-        fb.collapse_fmc_rules(comment=args.comment,recover=args.recovery_mode)
+    if config_file.get('rule_cleanup'):
+        fb = FireBroom(access_policy=config_file.get('access_policy'), ftd_host=config_file.get('firewall_sensor'),
+                       fmc_host=config_file.get('management_center'), rule_prepend_name=config_file.get('rule_prepend_name'),
+                       zone_of_last_resort=config_file.get('zone_of_last_resort'), same_cred=config_file.get('same_creds'),
+                       strict_checkup=config_file.get('strict_checkup'))
+
+        fb.collapse_fmc_rules(comment=config_file.get('comment'), recover=config_file.get('recovery_mode'))
     else:
-        fm = FireStick(cred_file=args.cred_file, ippp_location=args.ippp_location, access_policy=args.access_policy,
-                       rule_prepend_name=args.rule_prepend_name, fmc_host=args.fmc_host, ftd_host=args.ftd_host, domain=args.domain, zbr_bypass=args.zbr_bypass,
-                       zone_of_last_resort=args.zolr, same_cred=args.same_creds, ruleset_type=args.ruleset_type)
-        if args.ippp_checkup:
+        fm = FireStick(cred_file=args.cred_file, ippp_location=config_file.get('ippp_location'), access_policy=config_file.get('access_policy'),
+                       rule_prepend_name=config_file.get('rule_prepend_name'), fmc_host=config_file.get('management_center'), ftd_host=config_file.get('firewall_sensor'),
+                       domain=config_file.get('domain'), zbr_bypass=zbr_bypass, zone_of_last_resort=config_file.get('zone_of_last_resort'), same_cred=config_file.get('same_creds'),
+                       ruleset_type=config_file.get('ruleset_type'),strict_checkup=config_file.get('strict_checkup'))
+        if config_file.get('ippp_checkup'):
             fm.policy_deployment_flow(checkup=True)
         else:
             fm.policy_deployment_flow()

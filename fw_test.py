@@ -3,12 +3,15 @@ from ipaddress import ip_network
 from datetime import datetime
 from tqdm import tqdm
 
+
 class FireCheck:
+
     def __init__(self,af_class):
         self.copy_class = af_class
         self.logfmc = self.copy_class.logfmc
 
     def _fix_ippp_data(self):
+        # todo: need to grab ports if already in device and sub them out incase its incorrect on the ippp
         self.copy_class.zbr_bypass_check()
         test_ippp = self.copy_class.ippp[['source', 'destination', 'protocol', 'port']]
         for port_info in self.copy_class.port_data:
@@ -28,12 +31,13 @@ class FireCheck:
             rule_flow.update(src_flow)
             rule_flow.update(dst_flow)
             rule_flow.update({'port': test_ippp['port'][i] if test_ippp['port'][i] != 'any' else 'any'})
+
             ruleset.append(rule_flow)
         self.logfmc.warning(f'Dropped {same_zone_counter} rules from the IPPP which are the same zone')
         test_ippp = pd.DataFrame(ruleset)
         return test_ippp
     
-    def compare_ippp_acp(self,fix_ippp=True):
+    def compare_ippp_acp(self,fix_ippp=True,strict_checkup=False):
         if fix_ippp:
             test_ippp = self._fix_ippp_data()
         else:
@@ -42,7 +46,6 @@ class FireCheck:
         acp_id = self.copy_class.fmc.policy.accesspolicy.get(name=self.copy_class.access_policy)
         acp_rules = self.copy_class.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id['id'])
         acp_rules = self.copy_class.utils.transform_acp(acp_rules, self.copy_class)
-
         for col in test_ippp.columns:
             test_ippp[col] = test_ippp[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple, list)) else x)
         for col in acp_rules.columns:
@@ -65,7 +68,10 @@ class FireCheck:
                 cur_src_ip = current_rule['source']
                 cur_src_z = current_rule['src_z']
                 cur_dst_z = current_rule['dst_z']
-                cur_port = current_rule['port']
+                if strict_checkup:
+                    cur_port = current_rule['real_port']
+                else:
+                    cur_port = current_rule['port']
                 cr_list = [cur_dst_ip,cur_src_ip,cur_src_z,cur_dst_z,cur_port]
 
                 test_dst_ip = test_rule['destination_network']
@@ -150,6 +156,8 @@ class FireCheck:
         else:
             self.logfmc.warning(f'All Rules from IPPP implemented')
             return True
+
+
 
 
 
