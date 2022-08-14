@@ -765,8 +765,6 @@ class FireStick:
         self.rest_connection()
         # Get zone info first via ClI
         self.zone_ip_info = self.zone_to_ip_information()
-        # test_run
-        # self.zone_ip_info = pd.read_csv('temp_zii.csv')
         # get network and port information via rest
         self.fmc_net_port_info()
         # pull information from ippp

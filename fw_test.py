@@ -11,6 +11,7 @@ class FireCheck:
         self.logfmc = self.copy_class.logfmc
 
     def _fix_ippp_data(self):
+        # todo: need to grab ports if already in device and sub them out incase its incorrect on the ippp
         self.copy_class.zbr_bypass_check()
         test_ippp = self.copy_class.ippp[['source', 'destination', 'protocol', 'port']]
         for port_info in self.copy_class.port_data:
@@ -45,7 +46,6 @@ class FireCheck:
         acp_id = self.copy_class.fmc.policy.accesspolicy.get(name=self.copy_class.access_policy)
         acp_rules = self.copy_class.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id['id'])
         acp_rules = self.copy_class.utils.transform_acp(acp_rules, self.copy_class)
-        # todo: need to get REAL port from IPPP to compare on strict
         for col in test_ippp.columns:
             test_ippp[col] = test_ippp[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple, list)) else x)
         for col in acp_rules.columns:
@@ -156,6 +156,8 @@ class FireCheck:
         else:
             self.logfmc.warning(f'All Rules from IPPP implemented')
             return True
+
+
 
 
 
