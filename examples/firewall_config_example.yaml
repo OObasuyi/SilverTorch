@@ -1,4 +1,6 @@
 #### CONFIG FILE FOR SilverTorch V0.1 ####
+
+# can be firepower only right now. Palo_Alto will be coming in further releases if possible :)
 firewall_type: firepower
 
 # can be set to None if the device IS NOT MANAGED from a central controller
@@ -14,7 +16,7 @@ firewall_sensor: 10.11.6.191
 # when pushing a config this will be prepended to the new rules, \
 # in addition if other functions such as cleanup or checkup is used it will find rules in the ruleset with this specific \
 # name in the rule name BUT *BE AS CONCISE AS POSSIBLE.*
-rule_prepend_name: test
+rule_prepend_name: VOIP_RULES
 # if there is not a routing entry for a specific IP in the IPPP then use this zone to set its zone in the ruleset.
 zone_of_last_resort: outside_zone
 
@@ -23,14 +25,15 @@ ippp_location: gfrs.csv
 zone_based_routing_bypass: false
 # whether the controller and the firewall/sensor uses the same creds.
 same_creds: true
-# CAN ONLY BE ALLOW OR DENY
+# CAN ONLY BE ALLOW OR DENY FOR RULE ENTRY
 ruleset_type: ALLOW
+# APPENDED COMMENT TO RULES
 rule_comment: None
 
 # check to see if IPPP exist in the firewalls ruleset
 ippp_checkup: false
 # if there are rules that you want to collapse/reorganize for firewall scaffolding.
 rule_cleanup: false
-# emergency switch in case something happens(network/power drop) in rule cleanup module since it involved rearranges the firewall configs.
+# emergency switch in case something happened(network/power drop) in rule cleanup module since it involved rearranges the firewall configs.
 # this switch will reinstall the ACP ruleset that were modified.
 recovery_mode: false

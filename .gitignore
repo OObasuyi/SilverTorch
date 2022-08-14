@@ -1,6 +1,7 @@
 .DS_Store
 *.xml
 *.iml
+*.yaml
 /logs/
 *.pyc
 /*.csv

@@ -5,6 +5,7 @@ from json import load, dump
 from logging.handlers import TimedRotatingFileHandler
 from os import path, makedirs, replace,rename, remove,walk
 import pandas as pd
+import yaml
 
 TOP_DIR = path.dirname(path.abspath(__file__))
 
@@ -27,7 +28,7 @@ class Util:
     @staticmethod
     def create_file_path(folder:str,file_name:str):
         TOP_DIR = path.dirname(path.abspath(__file__))
-        allowed_exts = ['csv','log','txt','json','rulbk']
+        allowed_exts = ['csv','log','txt','json','rulbk','yaml']
 
         input_ext = '.'.join(file_name.split(".")[1:])
         if input_ext.lower() not in allowed_exts:
@@ -150,6 +151,17 @@ class Util:
         dir_path = path.join(TOP_DIR, folder)
         _, _, filenames = next(walk(dir_path))
         return [path.join(dir_path, file) for file in filenames if file.endswith(look_for_ext)]
+
+    @staticmethod
+    def open_yaml_files(file_name):
+        with open(file_name, "r") as stream:
+            try:
+                return yaml.safe_load(stream)
+            except yaml.YAMLError as yaml_error:
+                logc = log_collector()
+                logc.error(f'ERROR READ FILE: {file_name}. PLEASE ENSURE YOUR ARE USING THE CORRECT YAML FORMAT.')
+                logc.error(yaml_error)
+
 
 def deprecated(func):
     fname = func.__name__
