@@ -26,14 +26,15 @@ def terminal_entry():
     if config_file.get('rule_cleanup'):
         fb = FireBroom(access_policy=config_file.get('access_policy'), ftd_host=config_file.get('firewall_sensor'),
                        fmc_host=config_file.get('management_center'), rule_prepend_name=config_file.get('rule_prepend_name'),
-                       zone_of_last_resort=config_file.get('zone_of_last_resort'), same_cred=config_file.get('same_creds'))
+                       zone_of_last_resort=config_file.get('zone_of_last_resort'), same_cred=config_file.get('same_creds'),
+                       strict_checkup=config_file.get('strict_checkup'))
 
         fb.collapse_fmc_rules(comment=config_file.get('comment'), recover=config_file.get('recovery_mode'))
     else:
         fm = FireStick(cred_file=args.cred_file, ippp_location=config_file.get('ippp_location'), access_policy=config_file.get('access_policy'),
                        rule_prepend_name=config_file.get('rule_prepend_name'), fmc_host=config_file.get('management_center'), ftd_host=config_file.get('firewall_sensor'),
                        domain=config_file.get('domain'), zbr_bypass=zbr_bypass, zone_of_last_resort=config_file.get('zone_of_last_resort'), same_cred=config_file.get('same_creds'),
-                       ruleset_type=config_file.get('ruleset_type'))
+                       ruleset_type=config_file.get('ruleset_type'),strict_checkup=config_file.get('strict_checkup'))
         if config_file.get('ippp_checkup'):
             fm.policy_deployment_flow(checkup=True)
         else:

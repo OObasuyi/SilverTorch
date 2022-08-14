@@ -10,10 +10,10 @@ from fw_test import FireCheck
 
 class FireBroom(FireStick):
     def __init__(self, fmc_host: str, ftd_host: str, access_policy: str, rule_prepend_name: str,
-            zone_of_last_resort: str, same_cred=True, ruleset_type='ALLOW',domain='Global'):
+            zone_of_last_resort: str, same_cred=True, ruleset_type='ALLOW',domain='Global',**kwargs):
         ippp_location = None
         super().__init__(fmc_host, ftd_host, ippp_location, access_policy, rule_prepend_name,
-                         zone_of_last_resort,same_cred=same_cred,ruleset_type=ruleset_type,domain=domain)
+                         zone_of_last_resort,same_cred=same_cred,ruleset_type=ruleset_type,domain=domain,**kwargs)
         self.rest_connection()
 
     def del_fmc_objects(self, type_, obj_type):

@@ -39,6 +39,5 @@ rule_cleanup: false
 # this switch will reinstall the ACP ruleset that were modified.
 # recover old ACP file if the program crashed
 recovery_mode: false
-
 # if you want to use the ACTUAL PROTOCOL:PORT pair instead of the port defined name you can enable strict checking
 strict_checkup: true
