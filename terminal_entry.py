@@ -24,12 +24,12 @@ def terminal_entry():
         raise ValueError('RuleSet_type must be either allow or deny')
 
     if config_file.get('rule_cleanup'):
-        fb = FireBroom(access_policy=config_file.get('access_policy'), ftd_host=config_file.get('firewall_sensor'),
+        fb = FireBroom(cred_file=args.cred_file,access_policy=config_file.get('access_policy'), ftd_host=config_file.get('firewall_sensor'),
                        fmc_host=config_file.get('management_center'), rule_prepend_name=config_file.get('rule_prepend_name'),
                        zone_of_last_resort=config_file.get('zone_of_last_resort'), same_cred=config_file.get('same_creds'),
-                       strict_checkup=config_file.get('strict_checkup'))
+                       strict_checkup=config_file.get('strict_checkup'),ruleset_type=config_file.get('ruleset_type'))
 
-        fb.collapse_fmc_rules(comment=config_file.get('comment'), recover=config_file.get('recovery_mode'))
+        fb.collapse_fmc_rules(comment=config_file.get('rule_comment'), recover=config_file.get('recovery_mode'))
     else:
         fm = FireStick(cred_file=args.cred_file, ippp_location=config_file.get('ippp_location'), access_policy=config_file.get('access_policy'),
                        rule_prepend_name=config_file.get('rule_prepend_name'), fmc_host=config_file.get('management_center'), ftd_host=config_file.get('firewall_sensor'),

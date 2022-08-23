@@ -126,21 +126,24 @@ class Util:
         for i in current_ruleset:
             subset_rule = {}
             subset_rule['policy_name'] = i.get('name')
+            subset_rule['action'] = i.get('action')
             subset_rule['src_z'] = self_instance.find_nested_group_objects(i.get('sourceZones'))
             subset_rule['dst_z'] = self_instance.find_nested_group_objects(i.get('destinationZones'))
             subset_rule['source'] = self_instance.find_nested_group_objects(i.get('sourceNetworks'))
             subset_rule['destination'] = self_instance.find_nested_group_objects(i.get('destinationNetworks'))
             subset_rule['port'] = self_instance.find_nested_group_objects(i.get('destinationPorts'))
             if 'strict_checkup' in self_instance.pass_thru_commands and self_instance.pass_thru_commands.get('strict_checkup'):
-                if i.get('destinationPorts')['objects'][0]['type'] == 'ProtocolPortObject':
-                    for port_item in self_instance.port_data:
-                        if port_item[0] == i.get('destinationPorts')['objects'][0]['name']:
-                            subset_rule['real_port'] = [f'{port_item[1]}:{port_item[2]}']
-                elif i.get('destinationPorts')['objects'][0]['type'] == 'PortObjectGroup':
-                    for port_item in self_instance.port_group_object:
-                        if port_item[0] == i.get('destinationPorts')['objects'][0]['name']:
-                            # recurvsly look through the port objects for its names and get real port mapping from the port_data,
-                            subset_rule['real_port'] = [f'{port_item[1]}:{port_item[2]}' for port_list_item in port_item[1] for port_item in self_instance.port_data if port_item[0] == port_list_item[0]]
+                # changed to get since port can be NONE value AKA 'any' in the Rules
+                if i.get('destinationPorts') is not None:
+                    if i.get('destinationPorts')['objects'][0]['type'] == 'ProtocolPortObject':
+                        for port_item in self_instance.port_data:
+                            if port_item[0] == i.get('destinationPorts')['objects'][0]['name']:
+                                subset_rule['real_port'] = [f'{port_item[1]}:{port_item[2]}']
+                    elif i.get('destinationPorts')['objects'][0]['type'] == 'PortObjectGroup':
+                        for port_item in self_instance.port_group_object:
+                            if port_item[0] == i.get('destinationPorts')['objects'][0]['name']:
+                                # recurvsly look through the port objects for its names and get real port mapping from the port_data,
+                                subset_rule['real_port'] = [f'{port_item[1]}:{port_item[2]}' for port_list_item in port_item[1] for port_item in self_instance.port_data if port_item[0] == port_list_item[0]]
 
             changed_ruleset.append(subset_rule)
         current_ruleset = changed_ruleset

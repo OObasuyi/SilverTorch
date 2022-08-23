@@ -112,6 +112,7 @@ class FireBroom(FireStick):
                 rollback_acp = pickle.load(save_rule)
             self.logfmc.debug(f'recovered {recovery_loc} file')
             acp_rules = rollback_acp
+            # todo: need to let the user chose if they want to optimze the config are just insert the old config from the recover file
         else:
             # in case we fail our rule test or error happens while processing
             rollback_acp = acp_rules.copy()

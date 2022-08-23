@@ -465,8 +465,11 @@ class FireStick:
                     # zone
                     if ruleset['source_zone'][idx] == cur_src_z and ruleset['destination_zone'][idx] == cur_dst_z:
                         quondam += 1
+                    # action
+                    if current_ruleset['action'][i] == self.ruleset_type:
+                        quondam += 1
 
-                    if quondam >= 4:
+                    if quondam >= 5:
                         idx_collector.append(idx)
 
             idx_collector = list(set(idx_collector))
