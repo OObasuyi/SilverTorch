@@ -133,17 +133,67 @@ class Util:
             subset_rule['destination'] = self_instance.find_nested_group_objects(i.get('destinationNetworks'))
             subset_rule['port'] = self_instance.find_nested_group_objects(i.get('destinationPorts'))
             if 'strict_checkup' in self_instance.pass_thru_commands and self_instance.pass_thru_commands.get('strict_checkup'):
+                strict_holder = []
                 # changed to get since port can be NONE value AKA 'any' in the Rules
+
                 if i.get('destinationPorts') is not None:
-                    if i.get('destinationPorts')['objects'][0]['type'] == 'ProtocolPortObject':
-                        for port_item in self_instance.port_data:
-                            if port_item[0] == i.get('destinationPorts')['objects'][0]['name']:
-                                subset_rule['real_port'] = [f'{port_item[1]}:{port_item[2]}']
-                    elif i.get('destinationPorts')['objects'][0]['type'] == 'PortObjectGroup':
-                        for port_item in self_instance.port_group_object:
-                            if port_item[0] == i.get('destinationPorts')['objects'][0]['name']:
-                                # recurvsly look through the port objects for its names and get real port mapping from the port_data,
-                                subset_rule['real_port'] = [f'{port_item[1]}:{port_item[2]}' for port_list_item in port_item[1] for port_item in self_instance.port_data if port_item[0] == port_list_item[0]]
+                    real_dst_ports = i.get('destinationPorts')
+                    for k in real_dst_ports.keys():
+                        if k == 'literals':
+                            for port_item in real_dst_ports[k]:
+                                if port_item.get('port') is not None:
+                                    if port_item.get('protocol') == '6':
+                                        real_port = f'TCP:{port_item.get("port")}'
+                                        strict_holder.append(real_port)
+                                    elif port_item.get('protocol') == '17':
+                                        real_port = f'UDP:{port_item.get("port")}'
+                                        strict_holder.append(real_port)
+                        elif k == 'objects':
+                            for obj_item in real_dst_ports[k]:
+                                if obj_item.get('type') == 'ProtocolPortObject':
+                                    for port_item in self_instance.port_data:
+                                        if port_item[0] == obj_item['name']:
+                                            real_port = [f'{port_item[1]}:{port_item[2]}']
+                                            strict_holder.append(real_port)
+                                elif obj_item.get('type') == 'PortObjectGroup':
+                                    for port_item in self_instance.port_group_object:
+                                        if port_item[0] == obj_item['name']:
+                                            # recurvsly look through the port objects for its names and get real port mapping from the port_data
+                                            for port_list_item in port_item[1]:
+                                                for port_item in self_instance.port_data:
+                                                    if port_item[0] == port_list_item[0]:
+                                                        real_port = [f'{port_item[1]}:{port_item[2]}']
+                                                        strict_holder.append(real_port)
+                    if len(strict_holder) == 1:
+                        if not isinstance(next(iter(strict_holder)),list):
+                            subset_rule['real_port'] = strict_holder[0]
+                        else:
+                            subset_rule['real_port'] = [i for i in strict_holder[0]]
+                    else:
+                        save_list = []
+                        for i in strict_holder:
+                            if isinstance(i,list):
+                                for inner_i in i:
+                                    save_list.append(inner_i)
+                            else:
+                                save_list.append(i)
+                        subset_rule['real_port'] = save_list
+                else:
+                    subset_rule['real_port'] = None
+
+
+                #     dest_item = i.get('destinationPorts') if isinstance(i.get('destinationPorts'),list) else [i.get('destinationPorts')]
+                #     for i in dest_item:
+                # #
+                #     if i.get('destinationPorts')['objects'][0]['type'] == 'ProtocolPortObject':
+                #         for port_item in self_instance.port_data:
+                #             if port_item[0] == i.get('destinationPorts')['objects'][0]['name']:
+                #                 subset_rule['real_port'] = [f'{port_item[1]}:{port_item[2]}']
+                #     elif i.get('destinationPorts')['objects'][0]['type'] == 'PortObjectGroup':
+                #         for port_item in self_instance.port_group_object:
+                #             if port_item[0] == i.get('destinationPorts')['objects'][0]['name']:
+                #                 # recurvsly look through the port objects for its names and get real port mapping from the port_data,
+                #                 subset_rule['real_port'] = [f'{port_item[1]}:{port_item[2]}' for port_list_item in port_item[1] for port_item in self_instance.port_data if port_item[0] == port_list_item[0]]
 
             changed_ruleset.append(subset_rule)
         current_ruleset = changed_ruleset

@@ -357,29 +357,47 @@ class FireStick:
         return route_zone_info
 
     def find_nested_group_objects(self, object_item):
+        item_holder = []
         try:
-            object_item = object_item.get('objects')
-            if not isinstance(object_item, list):
-                return object_item
-            item_holder = []
-            for obj_info in object_item:
-                if 'group' not in obj_info.get('type').lower():
-                    item_holder.append(obj_info.get('name'))
-                elif 'group' in obj_info.get('type').lower():
-                    if 'port' not in obj_info.get('type').lower():
-                        for i in self.net_group_object:
-                            if i[0] == obj_info['name']:
-                                for v in i[1]:
-                                    for ip in self.net_data:
-                                        if v == ip[0]:
-                                            item_holder.append(ip[0])
+            # handle literals
+            for k in object_item.keys():
+                if k == 'objects':
+                    if not isinstance(object_item[k], list):
+                        item_holder.append(object_item[k])
                     else:
-                        for i in self.port_group_object:
-                            if obj_info.get('name') == i[0]:
-                                for v in i[1]:
-                                    for ports in self.port_data:
-                                        if v[0] == ports[0]:
-                                            item_holder.append(ports[0])
+                        for obj_info in object_item[k]:
+                            if 'group' not in obj_info.get('type').lower():
+                                if obj_info.get('name') is not None:
+                                    item_holder.append(obj_info['name'])
+
+                            elif 'group' in obj_info.get('type').lower():
+                                if 'port' not in obj_info.get('type').lower():
+                                    for i in self.net_group_object:
+                                        if i[0] == obj_info['name']:
+                                            for v in i[1]:
+                                                for ip in self.net_data:
+                                                    if v == ip[0]:
+                                                        item_holder.append(ip[0])
+                                else:
+                                    for i in self.port_group_object:
+                                        if obj_info.get('name') == i[0]:
+                                            for v in i[1]:
+                                                for ports in self.port_data:
+                                                    if v[0] == ports[0]:
+                                                        item_holder.append(ports[0])
+                elif k == 'literals':
+                    if not isinstance(object_item[k], list):
+                        item_holder.append(object_item[k])
+                    else:
+                        for obj_info in object_item[k]:
+                            if obj_info.get('value') is not None:
+                                item_holder.append(obj_info['value'])
+                            elif obj_info.get('port') is not None:
+                                if obj_info.get('protocol') == '6':
+                                    item_holder.append(f'TCP:{obj_info.get("port")}')
+                                elif obj_info.get('protocol') == '17':
+                                    item_holder.append(f'UDP:{obj_info.get("port")}')
+
             if len(item_holder) == 1:
                 return item_holder[0]
             sorted(item_holder)
