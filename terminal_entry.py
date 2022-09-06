@@ -23,18 +23,24 @@ def terminal_entry():
     if config_file.get('ruleset_type') not in ['ALLOW', 'DENY']:
         raise ValueError('RuleSet_type must be either allow or deny')
 
-    if config_file.get('rule_cleanup'):
+    if config_file.get('cleanup'):
         fb = FireBroom(cred_file=args.cred_file,access_policy=config_file.get('access_policy'), ftd_host=config_file.get('firewall_sensor'),
                        fmc_host=config_file.get('management_center'), rule_prepend_name=config_file.get('rule_prepend_name'),
                        zone_of_last_resort=config_file.get('zone_of_last_resort'), same_cred=config_file.get('same_creds'),
-                       strict_checkup=config_file.get('strict_checkup'),ruleset_type=config_file.get('ruleset_type'))
+                       strict_checkup=config_file.get('strict_checkup'),ruleset_type=config_file.get('ruleset_type')
+                       ,dont_include_domains=config_file.get('dont_include_domains'))
+        if config_file.get('rule_cleanup'):
+            fb.collapse_fmc_rules(comment=config_file.get('rule_comment'), recover=config_file.get('recovery_mode'))
 
-        fb.collapse_fmc_rules(comment=config_file.get('rule_comment'), recover=config_file.get('recovery_mode'))
+        if config_file.get('object_cleanup'):
+            fb.clean_object_names(clean_type=config_file.get('clean_type'))
+
     else:
         fm = FireStick(cred_file=args.cred_file, ippp_location=config_file.get('ippp_location'), access_policy=config_file.get('access_policy'),
                        rule_prepend_name=config_file.get('rule_prepend_name'), fmc_host=config_file.get('management_center'), ftd_host=config_file.get('firewall_sensor'),
                        domain=config_file.get('domain'), zbr_bypass=zbr_bypass, zone_of_last_resort=config_file.get('zone_of_last_resort'), same_cred=config_file.get('same_creds'),
-                       ruleset_type=config_file.get('ruleset_type'),strict_checkup=config_file.get('strict_checkup'))
+                       ruleset_type=config_file.get('ruleset_type'),strict_checkup=config_file.get('strict_checkup'),resolve_objects=config_file.get('resolve_objects'),
+                       dont_include_domains=config_file.get('dont_include_domains'))
         if config_file.get('ippp_checkup'):
             fm.policy_deployment_flow(checkup=True)
         else:

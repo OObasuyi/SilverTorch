@@ -4,6 +4,7 @@ from datetime import datetime
 from ipaddress import IPv4Network, ip_network
 from re import search, sub
 from time import sleep
+from socket import gethostbyaddr
 
 import pandas as pd
 from fireREST import FMC
@@ -180,8 +181,7 @@ class FireStick:
         except:
             return x.split('/')[0]
 
-    def retrieve_ippp(self):
-        ippp = pd.read_csv(self.ippp_location)
+    def retrieve_ippp(self,ippp):
         ippp = ippp.astype(str)
         ippp = ippp[ippp['source'] != 'nan']
         for origin in ['source', 'destination']:
@@ -212,6 +212,9 @@ class FireStick:
             elif col in ['port_range_low','port_range_high']:
                 ippp[col] = ippp[col].apply(lambda x: x.split('.0')[0] if x != 'nan' else x)
         return ippp
+
+    def fix_csv_file(self,ippp):
+        pass
 
     def find_dup_services(self):
         fixing_holder = []
@@ -291,7 +294,13 @@ class FireStick:
                 net_list = [{'name': net, 'value': net.replace('_', '/')} for net in net_list if net not in net_data]
 
                 host_list = list(set([host for host in install_pd[f'fmc_name_{type_}'] if not '_' in host]))
-                host_list = [{'name': host, 'value': host} for host in host_list if host not in net_data]
+
+                # check if need to resolve names
+                if self.pass_thru_commands.get('resolve_objects'):
+                    host_list = [{'name': self.retrieve_hostname(host), 'value': host} for host in host_list if host not in net_data]
+                else:
+                    host_list = [{'name': host, 'value': host} for host in host_list if host not in net_data]
+
                 try:
                     self.fmc.object.network.create(data=net_list)
                 except Exception as error:
@@ -323,6 +332,34 @@ class FireStick:
                         self.fmc.object.protocolportobject.create(data=port_list)
                     except Exception as error:
                         self.logfmc.debug(error)
+
+    def retrieve_hostname(self,ip):
+        # if hostname is somehow in our objects append 'new' to it, else return either the IP or the hostname
+        domain_check = self.pass_thru_commands.get('dont_include_domains')
+        try:
+            retrieved = gethostbyaddr(ip)[0]
+            if domain_check:
+                reg_match = search(domain_check,retrieved)
+                if bool(reg_match):
+                    mat_pat = reg_match.group(0)
+                    retrieved = retrieved.split(mat_pat)[0]
+                    check_if_gen_ptr = ''.join(dname for dname in retrieved if dname.isalnum())
+                    if check_if_gen_ptr.isnumeric():
+                        raise TypeError(f'GENERIC PTR RECORD RECEIVED FOR {retrieved}')
+            # get new data in case we created a new obj
+            self.fmc_net_port_info()
+            host_names = [i[0] for i in self.net_data]
+            count = 1
+            while True:
+                if retrieved in host_names:
+                    count += 1
+                    retrieved = f'{retrieved}_{count}'
+                else:
+                    return retrieved
+
+        except Exception as error:
+            self.logfmc.debug(error)
+            return ip
 
     def zone_to_ip_information(self):
         route_zone_info = []
@@ -789,7 +826,8 @@ class FireStick:
         # get network and port information via rest
         self.fmc_net_port_info()
         # pull information from ippp
-        self.ippp = self.retrieve_ippp()
+        ippp = pd.read_csv(self.ippp_location)
+        self.ippp = self.retrieve_ippp(ippp)
         self.fix_port_range_objects()
         if not checkup:
             # check ippp service values for uniqueness

@@ -1,5 +1,4 @@
 from datetime import datetime
-
 from fw_deploy import FireStick
 from tqdm import tqdm
 import pandas as pd
@@ -214,6 +213,22 @@ class FireBroom(FireStick):
         archive_dir = self.utils.create_file_path('archive', recovery_fname)
         replace(recovery_loc,archive_dir)
 
+    def clean_object_names(self,clean_type):
+        objects_ = [tuple([str(x['name']), str(x['value']), str(x['id'])]) for x in self.fmc.object.host.get()]
+        self.fmc_net_port_info()
+        if clean_type == 'resolve':
+            for obj in tqdm(objects_,total=len(objects_), desc=f'updating {clean_type} for objects'):
+                obj_ip = obj[1]
+                try:
+                    new_name = self.retrieve_hostname(obj_ip)
+                    if new_name != obj_ip:
+                        # update_objects.append({'name': new_name, 'value': obj[1],'id':obj[2]})
+                        update_obj = {'name': new_name, 'value': obj[1],'id':obj[2]}
+                        self.fmc.object.host.update(update_obj)
+                except Exception as error:
+                    self.logfmc.debug(error)
+                    continue
+
     def rollback_acp_op(self,rollback_pd,acp_id,comment:str=False):
         rollback_pd.rename(columns={'src_z': 'source_zone', 'dst_z': 'destination_zone','source': 'source_network', 'destination': 'destination_network'}, inplace=True)
         rollback_pd.drop(columns=['policy_name'], inplace=True)
@@ -223,8 +238,10 @@ class FireBroom(FireStick):
 
 
 if __name__ == "__main__":
-    weeper = FireBroom(access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone',same_cred=False)
-    weeper.collapse_fmc_rules(comment='tester123')
+    weeper = FireBroom(access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2',
+                       zone_of_last_resort='outside_zone',same_cred=False,cred_file='cF.JSON')
+    # weeper.collapse_fmc_rules(comment='tester123')
+    weeper.clean_object_names('networks')
     # augWork.del_fmc_objects(type_='port',obj_type='all')
     # augWork.del_fmc_objects(type_='network',,obj_type='all')
     # augWork.del_fmc_objects(type_='network',obj_type='all')
