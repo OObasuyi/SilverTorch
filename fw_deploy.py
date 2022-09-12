@@ -733,7 +733,7 @@ class FireStick:
             striped_group_name = [i[0] for i in self.net_group_object]
             for srcdest_net in ['source', 'destination']:
                 if 'any' != rule[f'{srcdest_net}_network']:
-                    if '_NetGroup_' in rule[f'{srcdest_net}_network'] or (not self.config_data.get('cleanup') and '_net_group_' in rule[f'{srcdest_net}_network']) or rule[f'{srcdest_net}_network'] in striped_group_name:
+                    if '_NetGroup_' in rule[f'{srcdest_net}_network'] or '_net_group_' in rule[f'{srcdest_net}_network'] or rule[f'{srcdest_net}_network'] in striped_group_name:
                         # update npi if we created a grouped policy
                         self.fmc_net_port_info()
                         rule_form[f'{srcdest_net}Networks'] = {'objects': fix_object(self.fmc.object.networkgroup.get(name=rule[f'{srcdest_net}_network']))}
