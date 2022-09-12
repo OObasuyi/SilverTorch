@@ -1,5 +1,4 @@
 from datetime import datetime
-
 from fw_deploy import FireStick
 from tqdm import tqdm
 import pandas as pd
@@ -212,11 +211,26 @@ class FireBroom(FireStick):
         archive_dir = self.utils.create_file_path('archive', recovery_fname)
         replace(recovery_loc,archive_dir)
 
+    def clean_object_names(self,clean_type):
+        objects_ = [tuple([str(x['name']), str(x['value']), str(x['id'])]) for x in self.fmc.object.host.get()]
+        self.fmc_net_port_info()
+        if clean_type == 'resolve':
+            for obj in tqdm(objects_,total=len(objects_), desc=f'updating {clean_type} for objects'):
+                obj_ip = obj[1]
+                try:
+                    new_name = self.retrieve_hostname(obj_ip)
+                    if new_name != obj_ip:
+                        # update_objects.append({'name': new_name, 'value': obj[1],'id':obj[2]})
+                        update_obj = {'name': new_name, 'value': obj[1],'id':obj[2]}
+                        self.fmc.object.host.update(update_obj)
+                except Exception as error:
+                    self.logfmc.debug(error)
+                    continue
+
     def rollback_acp_op(self,rollback_pd,acp_id,comment:str=False):
         rollback_pd.rename(columns={'src_z': 'source_zone', 'dst_z': 'destination_zone','source': 'source_network', 'destination': 'destination_network'}, inplace=True)
         rollback_pd.drop(columns=['policy_name'], inplace=True)
         if comment:
             rollback_pd['comment'] = comment
         self.deploy_rules(rollback_pd, acp_id)
-
 
