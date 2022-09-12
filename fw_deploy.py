@@ -24,13 +24,13 @@ class FireStick:
     def __init__(self, configuration_data:dict,cred_file=None):
         """
         @param cred_file: JSON file hosting user/pass information DEPRECATED
-        @param fmc_host: FMC domain or IP address
-        @param ftd_host: FTD domain or IP address
-        @param domain: used to select the tenant in FMC
-        @param ippp_location: location of rules to stage on FMC
-        @param access_policy: which ACP to stage the rules onto
-        @param zbr_bypass: (experimental) if you want to manually assign the security zone to rules instead of doing the zone to IP lookup make sure the zone and rules rows match exactly!
-        @param rule_prepend_name: an additive on what to call the staged rule. ie a rule will look like facetime_rule_allow_facetime_5324
+        @param configuration_data: KEY_fmc_host: FMC domain or IP address
+        @param configuration_data: KEY_ftd_host: FTD domain or IP address
+        @param configuration_data: KEY_domain: used to select the tenant in FMC
+        @param configuration_data: KEY_ippp_location: location of rules to stage on FMC
+        @param configuration_data: KEY_access_policy: which ACP to stage the rules onto
+        @param configuration_data: KEY_zbr_bypass: (experimental) if you want to manually assign the security zone to rules instead of doing the zone to IP lookup make sure the zone and rules rows match exactly!
+        @param configuration_data: KEY_rule_prepend_name: an additive on what to call the staged rule. ie a rule will look like facetime_rule_allow_facetime_5324
         where facetime_rule is the prepend var, allow_facetime is the comment and number is unique set of characters to distinguish the rule
         @@param zone_of_last_resort: this is needed when we dont know where a route lives relative to their Zone ie we know that a IP is northbound of our gateway or outside interface.
         @@param same_cred: whether all creds to login devices use the same user and password combination
