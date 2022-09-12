@@ -18,23 +18,15 @@ def terminal_entry():
     config_file = util.create_file_path(folder='SilverConfigs', file_name=args.config_file)
     config_file = util.open_yaml_files(config_file)
 
-    # handle optional None input
-    zbr_bypass = config_file.get('zone_based_routing_bypass') if config_file.get('zone_based_routing_bypass') else None
     if config_file.get('ruleset_type') not in ['ALLOW', 'DENY']:
         raise ValueError('RuleSet_type must be either allow or deny')
 
     if config_file.get('rule_cleanup'):
-        fb = FireBroom(cred_file=args.cred_file,access_policy=config_file.get('access_policy'), ftd_host=config_file.get('firewall_sensor'),
-                       fmc_host=config_file.get('management_center'), rule_prepend_name=config_file.get('rule_prepend_name'),
-                       zone_of_last_resort=config_file.get('zone_of_last_resort'), same_cred=config_file.get('same_creds'),
-                       strict_checkup=config_file.get('strict_checkup'),ruleset_type=config_file.get('ruleset_type'))
-
+        fb = FireBroom(cred_file=args.cred_file,configuration_data=config_file)
+        #todo: need to continue working on object cleanup
         fb.collapse_fmc_rules(comment=config_file.get('rule_comment'), recover=config_file.get('recovery_mode'))
     else:
-        fm = FireStick(cred_file=args.cred_file, ippp_location=config_file.get('ippp_location'), access_policy=config_file.get('access_policy'),
-                       rule_prepend_name=config_file.get('rule_prepend_name'), fmc_host=config_file.get('management_center'), ftd_host=config_file.get('firewall_sensor'),
-                       domain=config_file.get('domain'), zbr_bypass=zbr_bypass, zone_of_last_resort=config_file.get('zone_of_last_resort'), same_cred=config_file.get('same_creds'),
-                       ruleset_type=config_file.get('ruleset_type'),strict_checkup=config_file.get('strict_checkup'))
+        fm = FireStick(cred_file=args.cred_file, configuration_data=config_file)
         if config_file.get('ippp_checkup'):
             fm.policy_deployment_flow(checkup=True)
         else:
