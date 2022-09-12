@@ -132,7 +132,7 @@ class Util:
             subset_rule['source'] = self_instance.find_nested_group_objects(i.get('sourceNetworks'))
             subset_rule['destination'] = self_instance.find_nested_group_objects(i.get('destinationNetworks'))
             subset_rule['port'] = self_instance.find_nested_group_objects(i.get('destinationPorts'))
-            if 'strict_checkup' in self_instance.pass_thru_commands and self_instance.pass_thru_commands.get('strict_checkup'):
+            if 'strict_checkup' in self_instance.config_data and self_instance.config_data.get('strict_checkup'):
                 strict_holder = []
                 # changed to get since port can be NONE value AKA 'any' in the Rules
 

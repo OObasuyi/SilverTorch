@@ -8,11 +8,9 @@ from fw_test import FireCheck
 
 
 class FireBroom(FireStick):
-    def __init__(self, fmc_host: str, ftd_host: str, access_policy: str, rule_prepend_name: str,
-            zone_of_last_resort: str, same_cred=True, ruleset_type='ALLOW',domain='Global',**kwargs):
-        ippp_location = None
-        super().__init__(fmc_host, ftd_host, ippp_location, access_policy, rule_prepend_name,
-                         zone_of_last_resort,same_cred=same_cred,ruleset_type=ruleset_type,domain=domain,**kwargs)
+    def __init__(self, configuration_data:dict,cred_file=None):
+        configuration_data['ippp_location'] = None
+        super().__init__(configuration_data=configuration_data,cred_file=cred_file)
         self.rest_connection()
 
     def del_fmc_objects(self, type_, obj_type):
@@ -236,12 +234,3 @@ class FireBroom(FireStick):
             rollback_pd['comment'] = comment
         self.deploy_rules(rollback_pd, acp_id)
 
-
-if __name__ == "__main__":
-    weeper = FireBroom(access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2',
-                       zone_of_last_resort='outside_zone',same_cred=False,cred_file='cF.JSON')
-    # weeper.collapse_fmc_rules(comment='tester123')
-    weeper.clean_object_names('networks')
-    # augWork.del_fmc_objects(type_='port',obj_type='all')
-    # augWork.del_fmc_objects(type_='network',,obj_type='all')
-    # augWork.del_fmc_objects(type_='network',obj_type='all')

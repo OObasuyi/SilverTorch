@@ -21,10 +21,7 @@ pd.options.mode.chained_assignment = None
 
 class FireStick:
 
-    def __init__(self, fmc_host:str, ftd_host:str,ippp_location,
-            access_policy:str, rule_prepend_name:str,zone_of_last_resort:str,
-            zbr_bypass: dict = None,same_cred=True, ruleset_type='ALLOW',
-            cred_file: str = None,domain='Global',**kwargs):
+    def __init__(self, configuration_data:dict,cred_file=None):
         """
         @param cred_file: JSON file hosting user/pass information DEPRECATED
         @param fmc_host: FMC domain or IP address
@@ -40,30 +37,30 @@ class FireStick:
         @@param ruleset_type: rules can only be inserted as all allow or denies
         """
         self.utils = Util()
-        creds = self.get_device_creds(cred_file=cred_file, same_cred=same_cred)
+        creds = self.get_device_creds(cred_file=cred_file, same_cred=configuration_data.get('same_cred'))
         # Sec-lint #1
         for v in list(creds.values()):
             if not isinstance(v, (str, int, float)):
                 raise ValueError(f'Cred file has a value that is not allowed for this script. returned value of {type(v)}')
-        self.fmc_host = fmc_host
-        self.ftd_host = ftd_host
+        self.management_center = configuration_data.get('management_center')
+        self.firewall_sensor = configuration_data.get('firewall_sensor')
         self.fmc_username = creds['fmc_username']
         self.fmc_password = creds['fmc_password']
         self.ftd_username = creds['ftd_username']
         self.ftd_password = creds['ftd_password']
-        self.domain = domain
+        self.domain = configuration_data.get('domain')
         # some calls might not need a ippp file
-        if ippp_location is not None:
+        if configuration_data.get('ippp_location') is not None:
             # this is just a check the file MUST be the folder
-            self.ippp_location = self.utils.create_file_path('ingestion', ippp_location)
-        self.access_policy = access_policy
-        self.zbr_bypass = zbr_bypass
-        self.rule_prepend_name = rule_prepend_name
-        self.zone_of_last_resort = zone_of_last_resort
-        self.ruleset_type = ruleset_type.upper()
+            self.ippp_location = self.utils.create_file_path('ingestion', configuration_data.get('ippp_location'))
+        self.access_policy = configuration_data.get('access_policy')
+        self.zbr_bypass = configuration_data.get('zbr_bypass')
+        self.rule_prepend_name = configuration_data.get('rule_prepend_name')
+        self.zone_of_last_resort = configuration_data.get('zone_of_last_resort')
+        self.ruleset_type = configuration_data.get('ruleset_type').upper()
         self.logfmc = log_collector()
         # optional passing commands
-        self.pass_thru_commands = kwargs
+        self.config_data = configuration_data
 
     def _creation_check(self, response, new_obj, output=True):
         if response.status_code != 201:
@@ -76,7 +73,7 @@ class FireStick:
         if reset:
             self.fmc.conn.refresh()
         else:
-            self.fmc = FMC(hostname=self.fmc_host, username=self.fmc_username, password=self.fmc_password, domain=self.domain)
+            self.fmc = FMC(hostname=self.management_center, username=self.fmc_username, password=self.fmc_password, domain=self.domain)
 
     def fmc_net_port_info(self):
         net_objects = self.fmc.object.network.get()
@@ -365,7 +362,7 @@ class FireStick:
         route_zone_info = []
         ipv4_re = "^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$"
         ftd_info = {
-            'device_type': 'cisco_ftd_ssh', 'host': self.ftd_host,
+            'device_type': 'cisco_ftd_ssh', 'host': self.firewall_sensor,
             'username': self.ftd_username, 'password': self.ftd_password
         }
 
@@ -838,7 +835,7 @@ class FireStick:
         self.rest_connection(reset=True)
         ffc = FireCheck(self)
         if checkup:
-            if 'strict_checkup' in self.pass_thru_commands and self.pass_thru_commands.get('strict_checkup'):
+            if 'strict_checkup' in self.config_data and self.config_data.get('strict_checkup'):
                 literal_ippp = self.ippp.copy()
                 literal_ippp['port'] = literal_ippp['protocol'] + ':' + literal_ippp['port']
                 self.ippp = literal_ippp
