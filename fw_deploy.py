@@ -293,7 +293,7 @@ class FireStick:
                 host_list = list(set([host for host in install_pd[f'fmc_name_{type_}'] if not '_' in host]))
 
                 # check if need to resolve names
-                if self.pass_thru_commands.get('resolve_objects'):
+                if self.config_data.get('resolve_objects'):
                     host_list = [{'name': self.retrieve_hostname(host), 'value': host} for host in host_list if host not in net_data]
                 else:
                     host_list = [{'name': host, 'value': host} for host in host_list if host not in net_data]
@@ -332,7 +332,7 @@ class FireStick:
 
     def retrieve_hostname(self,ip):
         # if hostname is somehow in our objects append 'new' to it, else return either the IP or the hostname
-        domain_check = self.pass_thru_commands.get('dont_include_domains')
+        domain_check = self.config_data.get('dont_include_domains')
         try:
             retrieved = gethostbyaddr(ip)[0]
             if domain_check:
