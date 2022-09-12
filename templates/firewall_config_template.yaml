@@ -37,13 +37,20 @@ ippp_checkup: false
 #\ TEST SECTION
 
 #/ CLEAN UP SECTION
-cleanup: false
+cleanup: true
 # if there are rules that you want to collapse/reorganize for firewall scaffolding.
-rule_cleanup: false
+rule_cleanup: true
 # if you want change the name of host objects to there DNS or IP attributes.
-object_cleanup: false
-# whether you want IP or DNS as the new name value for object cleanup ACCEPTABLES: resolve|ip
-clean_type: resolve
+object_cleanup: true
+# change the name of the network objects
+# resolve: whether you want IP or DNS as the new name value for indiuduval objects
+# group: change the whole name of the grouped objects defined by @rule_prepend_name
+#         DEFAULT: will change convert legacy net_group to NetGroup format
+clean_type: group
+group_clean_name: None
+# if you want to delete ununsed objects in the firewall in conjuction of a cleanup
+remove_unused: false
+
 #\ CLEAN UP SECTION
 
 # emergency switch in case something happened(network/power drop) in rule cleanup module since it involved rearranges the firewall configs.

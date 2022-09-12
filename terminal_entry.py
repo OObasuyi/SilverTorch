@@ -21,10 +21,13 @@ def terminal_entry():
     if config_file.get('ruleset_type') not in ['ALLOW', 'DENY']:
         raise ValueError('RuleSet_type must be either allow or deny')
 
-    if config_file.get('rule_cleanup'):
-        fb = FireBroom(cred_file=args.cred_file,configuration_data=config_file)
-        #todo: need to continue working on object cleanup
-        fb.collapse_fmc_rules(comment=config_file.get('rule_comment'), recover=config_file.get('recovery_mode'))
+    if config_file.get('cleanup'):
+        fb = FireBroom(cred_file=args.cred_file, configuration_data=config_file)
+        if config_file.get('rule_cleanup'):
+            fb.collapse_fmc_rules(comment=config_file.get('rule_comment'), recover=config_file.get('recovery_mode'))
+
+        if config_file.get('object_cleanup'):
+            fb.clean_object_store(clean_type=config_file.get('clean_type'))
     else:
         fm = FireStick(cred_file=args.cred_file, configuration_data=config_file)
         if config_file.get('ippp_checkup'):

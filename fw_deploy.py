@@ -82,7 +82,7 @@ class FireStick:
         net_group_object = self.fmc.object.networkgroup.get()
         port_group_object = self.fmc.object.portobjectgroup.get()
 
-        def get_name_from_group_object(object_name: list, obj_type='net'):
+        def _get_name_from_group_object(object_name: list, obj_type='net'):
             if isinstance(object_name, list):
                 if obj_type == 'net':
                     return [i['name'] for i in object_name]
@@ -94,13 +94,13 @@ class FireStick:
         self.net_group_object = []
         for x in net_group_object:
             try:
-                self.net_group_object.append(tuple([str(x['name']), get_name_from_group_object(x.get('objects')), str(x['id'])]))
+                self.net_group_object.append(tuple([str(x['name']), _get_name_from_group_object(x.get('objects')), str(x['id'])]))
             except:
-                self.net_group_object.append(tuple([str(x['name']), get_name_from_group_object(x.get('literals')), str(x['id'])]))
+                self.net_group_object.append(tuple([str(x['name']), _get_name_from_group_object(x.get('literals')), str(x['id'])]))
 
         self.net_data = [tuple([str(x['name']), str(x['value']), str(x['id'])]) for x in net_objects] + [tuple([str(x['name']), str(x['value']), str(x['id'])]) for x in host_objects]
         self.port_data = [tuple([str(x.get('name')), str(x.get('protocol')), str(x.get('port')), str(x['id']), str(x['type'])]) for x in port_objects]
-        self.port_group_object = [tuple([str(x['name']), get_name_from_group_object(x.get('objects'), obj_type='port'), str(x['id'])]) for x in port_group_object]
+        self.port_group_object = [tuple([str(x['name']), _get_name_from_group_object(x.get('objects'), obj_type='port'), str(x['id'])]) for x in port_group_object]
 
     def retrieve_rule_objects(self):
         acp_id = self.fmc.policy.accesspolicy.get(name=self.access_policy)
