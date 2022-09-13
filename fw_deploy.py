@@ -37,7 +37,7 @@ class FireStick:
         @@param ruleset_type: rules can only be inserted as all allow or denies
         """
         self.utils = Util()
-        creds = self.get_device_creds(cred_file=cred_file, same_cred=configuration_data.get('same_cred'))
+        creds = self.get_device_creds(cred_file=cred_file, same_cred=configuration_data.get('same_creds'))
         # Sec-lint #1
         for v in list(creds.values()):
             if not isinstance(v, (str, int, float)):
