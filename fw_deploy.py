@@ -331,12 +331,11 @@ class FireStick:
                         self.logfmc.debug(error)
 
     def retrieve_hostname(self,ip):
-        # if hostname is somehow in our objects append 'new' to it, else return either the IP or the hostname
-        domain_check = self.config_data.get('dont_include_domains')
+        domain_check = self.config_data.get('dont_include_domains_suffix')
         try:
             retrieved = gethostbyaddr(ip)[0]
             if domain_check:
-                reg_match = search(domain_check,retrieved)
+                reg_match = search(f'({domain_check})$',retrieved)
                 if bool(reg_match):
                     mat_pat = reg_match.group(0)
                     retrieved = retrieved.split(mat_pat)[0]
@@ -353,7 +352,6 @@ class FireStick:
                     retrieved = f'{retrieved}_{count}'
                 else:
                     return retrieved
-
         except Exception as error:
             self.logfmc.debug(error)
             return ip
@@ -663,7 +661,7 @@ class FireStick:
         return ruleset,acp_id
 
     def deploy_rules(self,new_rules,current_acp_rules_id):
-        def fix_object(x):
+        def _fix_object(x):
             try:
                 x = x[0]
             except:
@@ -682,7 +680,7 @@ class FireStick:
             "logBegin": 'true' if self.ruleset_type == 'DENY' else 'false', "logEnd": 'true' if self.ruleset_type == 'ALLOW' else 'false'
         }
         # get all zone info
-        all_zones = {fix_object(i)[0]['name']: fix_object(i)[0] for i in self.fmc.object.securityzone.get()}
+        all_zones = {_fix_object(i)[0]['name']: _fix_object(i)[0] for i in self.fmc.object.securityzone.get()}
         # create a bulk policy push operation
         charity_policy = []
         take_num = 1
@@ -758,7 +756,7 @@ class FireStick:
                                                 v = create_group_obj['name']
                                                 break
                                             except Exception as error:
-                                                self.logfmc.error(error)
+                                                self.logfmc.critical(error)
                                     matched = True
                 dh[k] = v
             rule = dh
@@ -773,7 +771,7 @@ class FireStick:
                     if '_NetGroup_' in rule[f'{srcdest_net}_network'] or '_net_group_' in rule[f'{srcdest_net}_network'] or rule[f'{srcdest_net}_network'] in striped_group_name:
                         # update npi if we created a grouped policy
                         self.fmc_net_port_info()
-                        rule_form[f'{srcdest_net}Networks'] = {'objects': fix_object(self.fmc.object.networkgroup.get(name=rule[f'{srcdest_net}_network']))}
+                        rule_form[f'{srcdest_net}Networks'] = {'objects': _fix_object(self.fmc.object.networkgroup.get(name=rule[f'{srcdest_net}_network']))}
                     else:
                         if not isinstance(rule[f'{srcdest_net}_network'],list):
                             net_list = [rule[f'{srcdest_net}_network']]
@@ -795,7 +793,7 @@ class FireStick:
                 if '_PortGroup_' in rule['port'] or '_port_group_' in rule['port']: # support legacy
                     # update npi if we created a grouped policy
                     self.fmc_net_port_info()
-                    rule_form['destinationPorts'] = {'objects': fix_object(self.fmc.object.portobjectgroup.get(name=rule['port']))}
+                    rule_form['destinationPorts'] = {'objects': _fix_object(self.fmc.object.portobjectgroup.get(name=rule['port']))}
                 else:
                     if isinstance(rule['port'],str):
                         port = [rule['port']]
@@ -810,10 +808,10 @@ class FireStick:
             res = self.fmc.policy.accesspolicy.accessrule.create(data=charity_policy, container_uuid=current_acp_rules_id, category='automation_engine', )
             self._creation_check(res, charity_policy)
             self.logfmc.warning(f'{"#" * 5}RULES PUSHED SUCCESSFULLY{"#" * 5}')
-            return True
+            return True,1
         except Exception as error:
             self.logfmc.error(error)
-            return False
+            return False,error
 
     def policy_deployment_flow(self,checkup=False):
         # login FMC
@@ -845,13 +843,20 @@ class FireStick:
         else:
             # create FMC rules
             ruleset,acp_set = self.create_acp_rule()
-            # deploy rules
-            successful = self.deploy_rules(new_rules=ruleset, current_acp_rules_id=acp_set)
-            if successful:
-                # test rule Checkup
-                ffc.compare_ippp_acp()
-            else:
-                raise Exception('An error occured while processing the rules')
+            while True:
+                # deploy rules
+                successful,error_msg = self.deploy_rules(new_rules=ruleset, current_acp_rules_id=acp_set)
+                if successful:
+                    # test rule Checkup
+                    ffc.compare_ippp_acp()
+                    break
+                elif 'Please enter with another name' in str(error_msg):
+                    new_rule_name = input('please enter a new rule name to use in the ruleset')
+                    self.utils.permission_check(f'are you sure you want to continue with {new_rule_name} as the rule name?')
+                    self.rule_prepend_name = new_rule_name
+                else:
+                    self.logfmc.critical('An error occured while processing the rules')
+                    raise Exception('An error occured while processing the rules')
 
     @staticmethod
     @deprecated
@@ -876,4 +881,3 @@ class FireStick:
 
         cdict = {"fmc_username": fmc_u, "fmc_password": fmc_p, "ftd_username": ftd_u, "ftd_password": ftd_p}
         return cdict
-

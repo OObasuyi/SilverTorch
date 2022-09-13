@@ -41,7 +41,7 @@ class FireDetector(FireStick):
             # create FMC rules
             ruleset, acp_set = self.create_acp_rule()
             # deploy rules
-            successful = self.deploy_rules(new_rules=ruleset, current_acp_rules_id=acp_set)
+            successful,_ = self.deploy_rules(new_rules=ruleset, current_acp_rules_id=acp_set)
             if successful:
                 # test rule Checkup
                 ffc.compare_ippp_acp()

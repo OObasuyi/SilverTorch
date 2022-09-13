@@ -209,7 +209,7 @@ class FireBroom(FireStick):
         # Delete old rules
         self.del_fmc_objects(type_='rule', obj_type='all')
         # send new rules
-        success = self.deploy_rules(collapsed_rules, acp_id)
+        success,_ = self.deploy_rules(collapsed_rules, acp_id)
         if not success:
             self.logfmc.critical('Couldnt push new configs. Rolling Back!')
             self.rollback_acp_op(acp_rules, acp_id, comment=comment)
@@ -296,7 +296,6 @@ class FireBroom(FireStick):
                             counter += 1
                         else:
                             raise NotImplementedError('grouped cleaned issue')
-
 
     def rollback_acp_op(self, rollback_pd, acp_id, comment: str = False):
         rollback_pd.rename(columns={'src_z': 'source_zone', 'dst_z': 'destination_zone', 'source': 'source_network', 'destination': 'destination_network'}, inplace=True)
