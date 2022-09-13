@@ -7,10 +7,10 @@ firewall_type: firepower
 # can be set to None if the device IS NOT MANAGED from a central controller
 management_center: 10.11.6.60
 
-#/ the following is needed for firepower suite
+#/ firepower suite #
 access_policy: test_acp
 domain: Global
-#\
+#\ firepower suite #
 
 # the firewall to make routing and interface reference from FOR now a sample of ONE is supported.
 firewall_sensor: 10.11.6.191
@@ -31,12 +31,13 @@ ruleset_type: ALLOW
 # APPENDED COMMENT TO RULES
 rule_comment: None
 
-#/ TEST SECTION
+#/ TEST SECTION #
 # check to see if IPPP exist in the firewalls ruleset
 ippp_checkup: false
-#\ TEST SECTION
+#\ TEST SECTION #
 
-#/ CLEAN UP SECTION
+
+#/ CLEAN UP SECTION #
 cleanup: true
 # if there are rules that you want to collapse/reorganize for firewall scaffolding.
 rule_cleanup: true
@@ -50,39 +51,20 @@ clean_type: group
 group_clean_name: None
 # if you want to delete ununsed objects in the firewall in conjuction of a cleanup
 remove_unused: false
-
-#\ CLEAN UP SECTION
-
 # emergency switch in case something happened(network/power drop) in rule cleanup module since it involved rearranges the firewall configs.
 # this switch will reinstall the ACP ruleset that were modified.
 # recover old ACP file if the program crashed
 recovery_mode: false
+#\ CLEAN UP SECTION #
+
+
+#/ OBJECT GENERATION AND IDENTIFICATION #
 # if you want to use the ACTUAL PROTOCOL:PORT pair instead of the port defined name you can enable strict checking
 strict_checkup: true
 # if you want objects in the firewall to have DNS resolved local hostnames instead of IPs as the object name, enable this
 # you can also filter on what domain you just want the hostname for in dont_include_domains
 resolve_objects: false
 # This will by REGEX
-dont_include_domains: 'com|org'
+dont_include_domains: '.com|.org'
+#\ OBJECT GENERATION AND IDENTIFICATION #
 
-
-
-##### only used if you have FilMoreBlanks installed ######
-fill_csv_blanks: true
-
-# the key item should be the OLD value in the CSV to look for, while the value item should be what you want to change it
-# to. ALSO, the Value item HAS TO A BE LIST Object as one of the object displayed below
-change_list:
-  new servers: ['5,5,5,5','2.2.2.2','7,7,7,7']
-  11.1.0.0/16:
-    - "233.31.244.39"
-    - "100.19.68.193"
-    - '235.253.243.128'
-    - '232.151.66.30'
-    - '74.22.1.140'
-  169.156.158.231: ['111.254.29.134','96.20.144.254']
-
-# if only a particular set of columns are needed, match the key item from the change_list to the columns to only want
-# affected. this can be list or a string object.
-affect_only_columns:
-      11.1.0.0/16: 'source'
