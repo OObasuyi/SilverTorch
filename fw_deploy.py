@@ -331,7 +331,7 @@ class FireStick:
                         self.logfmc.debug(error)
 
     def retrieve_hostname(self,ip):
-        domain_check = self.config_data.get('dont_include_domains_suffix')
+        domain_check = self.config_data.get('dont_include_domains')
         try:
             retrieved = gethostbyaddr(ip)[0]
             if domain_check:

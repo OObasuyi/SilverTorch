@@ -48,7 +48,7 @@ object_cleanup: true
 # group: change the whole name of the grouped objects defined by @rule_prepend_name
 #         DEFAULT: will change convert legacy net_group to NetGroup format
 clean_type: group
-group_clean_name: None
+group_clean_name: false
 # if you want to delete ununsed objects in the firewall in conjuction of a cleanup
 remove_unused: false
 # emergency switch in case something happened(network/power drop) in rule cleanup module since it involved rearranges the firewall configs.
