@@ -714,7 +714,7 @@ class FireStick:
                                 # if this object exists already use it
                                 for ip_lists in self.net_group_object:
                                     if sorted(ip_lists[1]) == sorted(v):
-                                        # from cleanup module so we dont reuse group with less the min accepatable.
+                                        # from cleanup module so we dont reuse net groups with less the min acceptable size for creation.
                                         if len(ip_lists[1]) >= 50:
                                             v = ip_lists[0]
                                             matched = True
@@ -741,7 +741,7 @@ class FireStick:
                                 for port_lists in self.port_group_object:
                                     port_list_name = [p_name[0] for p_name in port_lists[1]]
                                     if sorted(port_list_name) == sorted(v):
-                                        # from cleanup module so we dont reuse group with less the min accepatable.
+                                        # from cleanup module so we dont reuse group with less the min acceptable size for creation.
                                         if len(port_lists[1]) >= 50:
                                             v = port_lists[0]
                                             matched = True
