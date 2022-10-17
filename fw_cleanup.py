@@ -111,7 +111,7 @@ class FireBroom(FireStick):
 
     def collapse_fmc_rules(self, comment: str = False, recover: bool = False):
         temp_dir = 'temp_rules'
-        dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
+        dt_now = datetime.now().replace(microsecond=0).strftime("%Y_%m_%d_%H%_M%_S")
         save_ext = 'rulbk'
         recovery_fname = f'{self.rule_prepend_name}_save_{dt_now}.{save_ext}'
         recovery_loc = self.utils.create_file_path(temp_dir, recovery_fname)

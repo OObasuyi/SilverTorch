@@ -331,7 +331,7 @@ class FireStick:
                         self.logfmc.debug(error)
 
     def retrieve_hostname(self,ip):
-        domain_check = self.config_data.get('dont_include_domains_suffix')
+        domain_check = self.config_data.get('dont_include_domains')
         try:
             retrieved = gethostbyaddr(ip)[0]
             if domain_check:
@@ -714,9 +714,11 @@ class FireStick:
                                 # if this object exists already use it
                                 for ip_lists in self.net_group_object:
                                     if sorted(ip_lists[1]) == sorted(v):
-                                        v = ip_lists[0]
-                                        matched = True
-                                        break
+                                        # from cleanup module so we dont reuse net groups with less the min acceptable size for creation.
+                                        if len(ip_lists[1]) >= 50:
+                                            v = ip_lists[0]
+                                            matched = True
+                                            break
                                 if not matched:
                                     # create group net or port objs by IDs since fmc cant create rules with more than 50 objects
                                     if len(v) >= 50:
@@ -739,9 +741,11 @@ class FireStick:
                                 for port_lists in self.port_group_object:
                                     port_list_name = [p_name[0] for p_name in port_lists[1]]
                                     if sorted(port_list_name) == sorted(v):
-                                        v = port_lists[0]
-                                        matched = True
-                                        break
+                                        # from cleanup module so we dont reuse group with less the min acceptable size for creation.
+                                        if len(port_lists[1]) >= 50:
+                                            v = port_lists[0]
+                                            matched = True
+                                            break
                                 if not matched:
                                     # create group net or port objs by IDs since fmc cant create rules with more than 50 objects
                                     if len(v) >= 50:
