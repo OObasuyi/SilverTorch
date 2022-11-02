@@ -57,6 +57,18 @@ remove_unused: false
 recovery_mode: false
 #\ CLEAN UP SECTION #
 
+#/ GENERAL INFORMATION FROM FIREWALLS
+# this will save all or specific rules from the firewall or management device
+save_rules: False
+# if you need to save specific rules it will use the "rule_prepend_name" mentioned above
+save_specific_rules: False
+#/ GENERAL INFORMATION FROM FIREWALLS
+
+
+#/ MODIFY EXISTING RULES
+mod_rules: false
+#/ MODIFY EXISTING RULES
+
 
 #/ OBJECT GENERATION AND IDENTIFICATION #
 # if you want to use the ACTUAL PROTOCOL:PORT pair instead of the port defined name you can enable strict checking
@@ -68,9 +80,3 @@ resolve_objects: false
 dont_include_domains: '.com|.org'
 #\ OBJECT GENERATION AND IDENTIFICATION #
 
-#/ GENERAL INFORMATION FROM FIREWALLS
-# this will save all or specific rules from the firewall or management device
-save_rules: False
-# if you need to save specific rules it will use the "rule_prepend_name" mentioned above
-save_specific_rules: False
-#/ GENERAL INFORMATION FROM FIREWALLS

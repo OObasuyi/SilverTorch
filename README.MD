@@ -55,10 +55,13 @@ augWork = FireStick(ippp_location='ippp_rel4.csv', access_policy='acp', ftd_host
 augWork.policy_deployment_flow()
 ```
 ### CAW
+
 ```python
 from fw_cleanup import FireBroom
-sweeper = FireBroom(access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone')
-sweeper.collapse_fmc_rules(comment='tester123')
+
+sweeper = FireBroom(access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60',
+                    rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone')
+sweeper.collapse_fw_rules(comment='tester123')
 ```  
 ### IC
 ```python

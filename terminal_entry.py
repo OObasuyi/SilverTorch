@@ -2,6 +2,7 @@ from argparse import ArgumentParser
 
 from fw_cleanup import FireBroom
 from fw_deploy import FireStick
+from fw_modify import FireHands
 from utilites import Util
 
 
@@ -26,12 +27,13 @@ def terminal_entry():
         fb = FireBroom(cred_file=args.cred_file, configuration_data=config_file)
         # rule cleanup
         if config_file.get('rule_cleanup'):
-            fb.collapse_fmc_rules(comment=config_file.get('rule_comment'), recover=config_file.get('recovery_mode'))
+            fb.collapse_fw_rules(comment=config_file.get('rule_comment'), recover=config_file.get('recovery_mode'))
         # objects cleanup
         if config_file.get('object_cleanup'):
             fb.clean_object_store(clean_type=config_file.get('clean_type'))
         return
 
+    # check rule consistency or deploy new rules
     if config_file.get('stage_ippp') or config_file.get('ippp_checkup'):
         fm = FireStick(cred_file=args.cred_file, configuration_data=config_file)
         if config_file.get('ippp_checkup'):
@@ -42,9 +44,16 @@ def terminal_entry():
             fm.policy_deployment_flow()
         return
 
+    # save CURRENT rules to disk
     if config_file.get('save_rules'):
         fm = FireStick(cred_file=args.cred_file, configuration_data=config_file)
         fm.export_current_policy()
+        return
+
+    # modify existing rules
+    if config_file.get('mod_rules'):
+        fh = FireHands(cred_file=args.cred_file, configuration_data=config_file)
+        fh.modify_ruleset()
         return
 
 

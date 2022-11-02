@@ -50,7 +50,7 @@ class FireStick:
         self.ftd_password = creds['ftd_password']
         self.domain = configuration_data.get('domain')
         # some calls might not need a ippp file
-        if configuration_data.get('ippp_location') is not None:
+        if configuration_data.get('ippp_location'):
             # this is just a check the file MUST be the folder
             self.ippp_location = self.utils.create_file_path('ingestion', configuration_data.get('ippp_location'))
         self.access_policy = configuration_data.get('access_policy')
@@ -460,7 +460,7 @@ class FireStick:
                 return sorted(list(set(f"{px[1]}:{px[2]}" for rulep in p for px in self.port_data if rulep == px[0])))
 
     def find_inter_dup_policies(self, ruleset):
-        ruleset, current_ruleset,acp_id = self.transform_rulesets(proposed_rules=ruleset)
+        ruleset, current_ruleset, acp_id = self.transform_rulesets(proposed_rules=ruleset)
 
         if current_ruleset is not None:
             # remove rules that are dups
@@ -572,7 +572,7 @@ class FireStick:
             if not isinstance(self.zbr_bypass, dict):
                 raise TypeError(f'zbr_bypass is a {type(self.zbr_bypass)} object not dict')
 
-    def create_acp_rule(self):
+    def standardize_ippp(self):
         ruleset = []
         self.zbr_bypass_check()
         # sort rules in a pretty format
@@ -593,7 +593,12 @@ class FireStick:
         # if there all the same zone then we got nothing to find dups of
         if ruleset.empty:
             raise Exception('NOTHING IN RULESET THEY MIGHT ALL BE THE SAME ZONE')
-        ruleset,acp_id = self.find_inter_dup_policies(ruleset)
+        return ruleset
+
+    def create_acp_rule(self):
+        # get ruleset
+        ruleset = self.standardize_ippp()
+        ruleset, acp_id = self.find_inter_dup_policies(ruleset)
 
         # if we removed all the dups and we have no new rules or for some reason we dont have rules to deploy raise to stop the program
         try:

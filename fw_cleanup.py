@@ -11,9 +11,11 @@ from fw_test import FireCheck
 
 class FireBroom(FireStick):
     def __init__(self, configuration_data: dict, cred_file=None):
-        configuration_data['ippp_location'] = None
         super().__init__(configuration_data=configuration_data, cred_file=cred_file)
         self.rest_connection()
+        self.temp_dir = 'temp_rules'
+        self.dt_now = datetime.now().replace(microsecond=0).strftime("%Y_%m_%d_%H%_M%_S")
+        self.save_ext = 'rulbk'
 
     def is_prepend_naming_correct(self,name_of_obj):
         # check if it's a exact name match of the group
@@ -109,14 +111,16 @@ class FireBroom(FireStick):
         else:
             raise ValueError(f'type_ not found please select rule, port, or network. you passed {type_}')
 
-    def collapse_fmc_rules(self, comment: str = False, recover: bool = False):
-        temp_dir = 'temp_rules'
-        dt_now = datetime.now().replace(microsecond=0).strftime("%Y_%m_%d_%H%_M%_S")
-        save_ext = 'rulbk'
-        recovery_fname = f'{self.rule_prepend_name}_save_{dt_now}.{save_ext}'
-        recovery_loc = self.utils.create_file_path(temp_dir, recovery_fname)
-        if not isinstance(comment, str):
-            raise ValueError('COMMENT VALUE MUST BE PASSED')
+    @staticmethod
+    def backup_rules_op(acp_rules,recovery_loc):
+        rollback_acp = acp_rules.copy()
+        with open(recovery_loc, 'wb') as save_rule:
+            pickle.dump(rollback_acp, save_rule)
+
+    def prep_and_recover_fw_rules(self, recover: bool = False):
+        recovery_fname = f'{self.rule_prepend_name}_save_{self.dt_now}.{self.save_ext}'
+        recovery_loc = self.utils.create_file_path(self.temp_dir, recovery_fname)
+
         acp_id, acp_rules = self.retrieve_rule_objects()
         self.fmc_net_port_info()
         if not recover:
@@ -129,7 +133,7 @@ class FireBroom(FireStick):
         # there should only one file in this dir from last run
         if recover:
             self.logfmc.warning('entering recovery mode')
-            recovery_loc = self.utils.get_files_from_dir(temp_dir, save_ext)[0]
+            recovery_loc = self.utils.get_files_from_dir(self.temp_dir, self.save_ext)[0]
             with open(recovery_loc, 'rb') as save_rule:
                 rollback_acp = pickle.load(save_rule)
             self.logfmc.debug(f'recovered {recovery_loc} file')
@@ -137,14 +141,21 @@ class FireBroom(FireStick):
             # todo: need to let the user chose if they want to optimze the config are just insert the old config from the recover file
         else:
             # in case we fail our rule test or error happens while processing
-            rollback_acp = acp_rules.copy()
-            with open(recovery_loc, 'wb') as save_rule:
-                pickle.dump(rollback_acp, save_rule)
+            self.backup_rules_op(acp_rules,recovery_loc)
 
         for col in acp_rules.columns:
             acp_rules[col] = acp_rules[col].apply(lambda x: tuple(v for v in x) if isinstance(x, list) else x)
-        # fill in vals that are really any
+            # fill in vals that are really any
         acp_rules.replace({None: 'any'}, inplace=True)
+
+        return acp_rules,acp_id,recovery_fname,recovery_loc
+
+    def collapse_fw_rules(self, comment: str = False, recover: bool = False):
+        if not isinstance(comment, str):
+            raise ValueError('COMMENT VALUE MUST BE PASSED')
+        # DRP the fw rules
+        acp_rules,acp_id,recovery_fname,recovery_loc = self.prep_and_recover_fw_rules(recover)
+
         # collapse FW rules by zone
         grouped_rules = acp_rules.groupby(['src_z', 'dst_z'])
         gpl = grouped_rules.size()[grouped_rules.size() > 0].index.values.tolist()
