@@ -31,14 +31,44 @@ ruleset_type: ALLOW
 # APPENDED COMMENT TO RULES
 rule_comment: None
 
+
 # check to see if IPPP exist in the firewalls ruleset
 ippp_checkup: false
+
+
+#/ CLEAN UP SECTION
+cleanup: true
 # if there are rules that you want to collapse/reorganize for firewall scaffolding.
-rule_cleanup: false
+rule_cleanup: true
+# if you want change the name of host objects to there DNS or IP attributes.
+object_cleanup: true
+# change the name of the network objects
+# resolve: whether you want IP or DNS as the new name value for indiuduval objects
+# group: change the whole name of the grouped objects defined by @rule_prepend_name
+#         DEFAULT: will change convert legacy net_group to NetGroup format
+clean_type: group
+remove_unused: true
+#\ CLEAN UP SECTION
+
 # emergency switch in case something happened(network/power drop) in rule cleanup module since it involved rearranges the firewall configs.
 # this switch will reinstall the ACP ruleset that were modified.
-# recover old ACP file if the program crashed
-recovery_mode: false
+recovery_mode: true
 
+#/ OBJECT GENERATION AND IDENTIFICATION
 # if you want to use the ACTUAL PROTOCOL:PORT pair instead of the port defined name you can enable strict checking
 strict_checkup: true
+# if you want objects in the firewall to have DNS resolved local hostnames instead of IPs as the object name, enable this
+# you can also filter on what SUFFIX domain you just want the hostname for
+resolve_objects: true
+# This accepts regexs
+dont_include_domains_suffix: '.com|.org|.net|.hole|.einet.einetworks.blankmarks.com|.ein.eil'
+#\ OBJECT GENERATION AND IDENTIFICATION
+
+
+#/ GENERAL INFORMATION FROM FIREWALLS
+# this will save all or specific rules from the firewall or management device
+save_rules: False
+# if you need to save specific rules it will use the "rule_prepend_name" mentioned above
+save_specific_rules: False
+#/ GENERAL INFORMATION FROM FIREWALLS
+

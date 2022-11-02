@@ -31,11 +31,11 @@ ruleset_type: ALLOW
 # APPENDED COMMENT TO RULES
 rule_comment: None
 
-#/ TEST SECTION #
+#/ RULE MANAGEMENT
+stage_ippp: true
 # check to see if IPPP exist in the firewalls ruleset
 ippp_checkup: false
-#\ TEST SECTION #
-
+#/ RULE MANAGEMENT
 
 #/ CLEAN UP SECTION #
 cleanup: true
@@ -68,3 +68,9 @@ resolve_objects: false
 dont_include_domains: '.com|.org'
 #\ OBJECT GENERATION AND IDENTIFICATION #
 
+#/ GENERAL INFORMATION FROM FIREWALLS
+# this will save all or specific rules from the firewall or management device
+save_rules: False
+# if you need to save specific rules it will use the "rule_prepend_name" mentioned above
+save_specific_rules: False
+#/ GENERAL INFORMATION FROM FIREWALLS

@@ -21,19 +21,31 @@ def terminal_entry():
     if config_file.get('ruleset_type') not in ['ALLOW', 'DENY']:
         raise ValueError('RuleSet_type must be either allow or deny')
 
+    # clean up
     if config_file.get('cleanup'):
         fb = FireBroom(cred_file=args.cred_file, configuration_data=config_file)
+        # rule cleanup
         if config_file.get('rule_cleanup'):
             fb.collapse_fmc_rules(comment=config_file.get('rule_comment'), recover=config_file.get('recovery_mode'))
-
+        # objects cleanup
         if config_file.get('object_cleanup'):
             fb.clean_object_store(clean_type=config_file.get('clean_type'))
-    else:
+        return
+
+    if config_file.get('stage_ippp') or config_file.get('ippp_checkup'):
         fm = FireStick(cred_file=args.cred_file, configuration_data=config_file)
         if config_file.get('ippp_checkup'):
+            # check if IPPP is in current ruleset
             fm.policy_deployment_flow(checkup=True)
-        else:
+        elif config_file.get('stage_ippp'):
+            # standard policy deployment
             fm.policy_deployment_flow()
+        return
+
+    if config_file.get('save_rules'):
+        fm = FireStick(cred_file=args.cred_file, configuration_data=config_file)
+        fm.export_current_policy()
+        return
 
 
 if __name__ == "__main__":

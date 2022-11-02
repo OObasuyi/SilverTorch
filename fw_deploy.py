@@ -108,8 +108,8 @@ class FireStick:
         acp_rules = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id)
         return acp_id, acp_rules
 
-    def transform_rulesets(self,ruleset=None,save=False,save_all=False):
-        if save:
+    def transform_rulesets(self,proposed_rules=None,save_current_ruleset=False):
+        if save_current_ruleset:
             self.rest_connection()
             self.fmc_net_port_info()
 
@@ -130,40 +130,45 @@ class FireStick:
         current_ruleset = self.utils.transform_acp(current_ruleset,self)
         if len(current_ruleset) < 1:
             self.logfmc.error('nothing in current ruleset')
-            return ruleset,None,acp_id
+            return proposed_rules,None,acp_id
 
         self.logfmc.warning("getting real IPs from named network objects")
         for ip in ['source', 'destination']:
             current_ruleset[f'real_{ip}'] = current_ruleset[ip].apply(lambda p: self.fdp_grouper(p, 'ip'))
-            if ruleset is not None:
-                ruleset[f'real_{ip}'] = ruleset[f'{ip}_network'].apply(lambda p: self.fdp_grouper(p, 'ip'))
+            if proposed_rules is not None:
+                proposed_rules[f'real_{ip}'] = proposed_rules[f'{ip}_network'].apply(lambda p: self.fdp_grouper(p, 'ip'))
 
         self.logfmc.warning("getting real ports-protocols from named port objects")
         current_ruleset['real_port'] = current_ruleset['port'].apply(lambda p: self.fdp_grouper(p, 'port'))
-        if ruleset is not None:
-            ruleset['real_port'] = ruleset['port'].apply(lambda p: self.fdp_grouper(p, 'port'))
+        if proposed_rules is not None:
+            proposed_rules['real_port'] = proposed_rules['port'].apply(lambda p: self.fdp_grouper(p, 'port'))
 
         # remove nan values with any
         current_ruleset.fillna(value='any', inplace=True)
         current_ruleset.replace({'None': 'any'}, inplace=True)
 
         # make sure we are matching by list type and sorting correctly even if its a list object
-        if ruleset is not None:
-            for col in ruleset.columns:
-                ruleset[col] = ruleset[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple, list)) else x)
+        if proposed_rules is not None:
+            for col in proposed_rules.columns:
+                proposed_rules[col] = proposed_rules[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple, list)) else x)
         for col in current_ruleset.columns:
             current_ruleset[col] = current_ruleset[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple, list)) else x)
 
-        if ruleset is not None:
-            ruleset.fillna(value='any', inplace=True)
-        if save:
-            if save_all:
-                save_name = self.utils.create_file_path('saved_rules',f'all_rules_{self.access_policy}.csv')
+        if proposed_rules is not None:
+            proposed_rules.fillna(value='any', inplace=True)
+        if save_current_ruleset:
+            dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d_%H%M")
+            # save rule to disk in CSV format
+            if self.config_data.get('save_specific_rules'):
+                current_ruleset = current_ruleset[current_ruleset['policy_name'].str.startswith(self.rule_prepend_name)]
+                save_name = self.utils.create_file_path('saved_rules/specific_rules', f'{self.rule_prepend_name}_{self.access_policy}_{dt_now}.csv')
             else:
-                save_name = self.utils.create_file_path('saved_rules', f'{self.rule_prepend_name}_rules_{self.access_policy}.csv')
+                save_name = self.utils.create_file_path('saved_rules/all_rules',f'{self.access_policy}_{dt_now}.csv')
+
             current_ruleset.to_csv(save_name,index=False)
-        if ruleset is not None:
-            return ruleset,current_ruleset,acp_id
+            return save_name
+        if proposed_rules is not None:
+            return proposed_rules,current_ruleset,acp_id
 
     @staticmethod
     def _ip_address_check(x):
@@ -455,7 +460,7 @@ class FireStick:
                 return sorted(list(set(f"{px[1]}:{px[2]}" for rulep in p for px in self.port_data if rulep == px[0])))
 
     def find_inter_dup_policies(self, ruleset):
-        ruleset, current_ruleset,acp_id = self.transform_rulesets(ruleset=ruleset)
+        ruleset, current_ruleset,acp_id = self.transform_rulesets(proposed_rules=ruleset)
 
         if current_ruleset is not None:
             # remove rules that are dups
@@ -837,7 +842,7 @@ class FireStick:
         self.rest_connection(reset=True)
         ffc = FireCheck(self)
         if checkup:
-            if 'strict_checkup' in self.config_data and self.config_data.get('strict_checkup'):
+            if self.config_data.get('strict_checkup'):
                 literal_ippp = self.ippp.copy()
                 literal_ippp['port'] = literal_ippp['protocol'] + ':' + literal_ippp['port']
                 self.ippp = literal_ippp
@@ -861,6 +866,11 @@ class FireStick:
                 else:
                     self.logfmc.critical('An error occured while processing the rules')
                     raise Exception('An error occured while processing the rules')
+
+    def export_current_policy(self):
+        savename = self.transform_rulesets(save_current_ruleset=True)
+        self.logfmc.warning(f'Current Rules saved to {savename}')
+
 
     @staticmethod
     @deprecated
