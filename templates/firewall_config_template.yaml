@@ -62,6 +62,10 @@ recovery_mode: false
 save_rules: False
 # if you need to save specific rules it will use the "rule_prepend_name" mentioned above
 save_specific_rules: False
+# convert rules in a readable format
+pretty_rules: true
+# only get rules based on IP with this regex mapping
+specific_src_dst: '192.168.*|10\..*|218.17.85.*'
 #/ GENERAL INFORMATION FROM FIREWALLS
 
 
