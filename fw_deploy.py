@@ -927,8 +927,8 @@ class FireStick:
 
                 # adjust port cols and rename
                 subset_df['protocol'] = subset_df['real_port'].apply(lambda x: x.split(':')[0])
-                subset_df['low port range'] = subset_df['real_port'].apply(lambda x: x.split(':')[1].split('-')[0])
-                subset_df['high port range'] = subset_df['real_port'].apply(lambda x: x.split(':')[1].split('-')[-1])
+                subset_df['low port range'] = subset_df['real_port'].apply(lambda x: x.split(':')[1].split('-')[0] if x != 'any' else x)
+                subset_df['high port range'] = subset_df['real_port'].apply(lambda x: x.split(':')[1].split('-')[-1] if x != 'any' else x)
                 subset_df.drop(columns=['real_port'],inplace=True)
                 subset_df.rename(columns={'real_source':'source','real_destination':'destination'},inplace=True)
 
