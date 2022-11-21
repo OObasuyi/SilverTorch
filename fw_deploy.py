@@ -192,7 +192,8 @@ class FireStick:
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
         fpath = self.utils.create_file_path('CNI', f'{self.rule_prepend_name}_non_applicable_protocols_{dt_now}.csv')
         if not na_protos.empty:
-            self.logfmc.warning(f'found protocols that cannot be used with this script\n Please enter them manually\n file location: {fpath}')
+            self.logfmc.warning('found protocols that cannot be used with this script. Please enter them manually')
+            self.logfmc.warning(f'PROTOCOLS NOT IMPLEMENTED LOCATED AT FILE LOCATION: {fpath}')
             # make sure the user sees the msg with no input.
             sleep(2)
             na_protos.to_csv(fpath, index=False)
@@ -533,6 +534,11 @@ class FireStick:
         return ruleset,acp_id
 
     def get_zone_from_ip(self, type_, i):
+        # drop 0.0.0.0 so we dont get the outside zone matching due to it being a wildcard
+        normalized_zone_ip_info = self.zone_ip_info.copy()
+        normalized_zone_ip_info = normalized_zone_ip_info[normalized_zone_ip_info['IP'] != "0.0.0.0"]
+        normalized_zone_ip_info.reset_index(inplace=True,drop=True)
+
         if self.ippp[type_][i] == 'any':
             return {f"{type_}_zone": 'any', f'{type_}_network': 'any'}
         elif self.zbr_bypass is not None:
@@ -542,13 +548,13 @@ class FireStick:
         ippp_subnet = ip_network(self.ippp[type_][i])
         # if we need to find where a host address lives exactly
         if '/' not in self.ippp[type_][i] or '/32' in self.ippp[type_][i]:
-            for p in self.zone_ip_info.index:
-                asp_subnet = self.zone_ip_info['ip_cidr'][p]
+            for p in normalized_zone_ip_info.index:
+                asp_subnet = normalized_zone_ip_info['ip_cidr'][p]
                 if ippp_subnet.subnet_of(ip_network(asp_subnet)):
-                    return {f"{type_}_zone": self.zone_ip_info['ZONE'][p], f'{type_}_network': self.ippp[f'fmc_name_{type_}'][i]}
+                    return {f"{type_}_zone": normalized_zone_ip_info['ZONE'][p], f'{type_}_network': self.ippp[f'fmc_name_{type_}'][i]}
         # if we need to find all zones a subnet might reside
         elif '/' in self.ippp[type_][i]:
-            zone_group = tuple(list(set([self.zone_ip_info['ZONE'][p] for p in self.zone_ip_info.index if ip_network(self.zone_ip_info['ip_cidr'][p]).subnet_of(ippp_subnet)])))
+            zone_group = tuple(list(set([normalized_zone_ip_info['ZONE'][p] for p in normalized_zone_ip_info.index if ippp_subnet.subnet_of(ip_network(normalized_zone_ip_info['ip_cidr'][p]))])))
             if len(zone_group) != 0:
                 zone_group = zone_group if len(zone_group) > 1 else zone_group[0]
                 return {f"{type_}_zone": zone_group, f'{type_}_network': self.ippp[f'fmc_name_{type_}'][i]}

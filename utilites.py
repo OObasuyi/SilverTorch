@@ -202,6 +202,7 @@ class Util:
                 logc = log_collector()
                 logc.error(f'ERROR READ FILE: {file_name}. PLEASE ENSURE YOUR ARE USING THE CORRECT YAML FORMAT.')
                 logc.error(yaml_error)
+                quit()
 
     @staticmethod
     def zip_files(output_filename,dir_name):
