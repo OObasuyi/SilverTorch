@@ -32,6 +32,9 @@ def terminal_entry():
         # objects cleanup
         if config_file.get('object_cleanup'):
             fb.clean_object_store(clean_type=config_file.get('clean_type'))
+        # delete ununsed rules
+        if config_file.get('delete_unused_rules'):
+            fb.remove_non_hit_rules()
         return
 
     # check rule consistency or deploy new rules

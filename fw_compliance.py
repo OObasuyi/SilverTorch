@@ -1,11 +1,10 @@
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 
 from fw_deploy import FireStick
 from datetime import datetime
 import pandas as pd
 from re import search
 from os import getpid
-from psutil import cpu_count
 
 
 class FireComply(FireStick):
@@ -30,8 +29,8 @@ class FireComply(FireStick):
         if self.config_data.get('pretty_rules'):
             current_ruleset.drop(columns=['src_z', 'dst_z', 'port', 'source', 'destination'], inplace=True)
             parsed_ruleset = []
-            # use n-1 physical cores
-            pool = Pool(cpu_count(logical=False)-1)
+            # TRY to use n-1 physical cores ( dont want anymore imports)
+            pool = Pool(int((cpu_count() / 2)) - 1)
 
             # internal func to collect subset_df
             def rule_gatherer_callback(data):
@@ -41,15 +40,15 @@ class FireComply(FireStick):
             def log_func_error(error):
                 self.logfmc.error(error)
 
-            current_ruleset.reset_index(inplace=True,drop=True)
+            current_ruleset.reset_index(inplace=True, drop=True)
             # break list elm into cells
             for cr_i in current_ruleset.index:
-                pool.apply_async(self.rule_spool, args=(cr_i,current_ruleset,), callback=rule_gatherer_callback,error_callback=log_func_error)
+                pool.apply_async(self.rule_spool, args=(cr_i, current_ruleset,), callback=rule_gatherer_callback, error_callback=log_func_error)
             pool.close()
             pool.join()
 
             # combine dfs into one
-            parsed_ruleset = pd.concat(parsed_ruleset,ignore_index=True)
+            parsed_ruleset = pd.concat(parsed_ruleset, ignore_index=True)
 
             # save rule to disk in CSV format
             output_dir = f'{output_dir}/pretty'
@@ -62,7 +61,7 @@ class FireComply(FireStick):
         save_name = self.utils.create_file_path(output_dir, output_file)
         current_ruleset.to_csv(save_name, index=False)
 
-    def rule_spool(self,idx,current_ruleset):
+    def rule_spool(self, idx, current_ruleset):
         self.logfmc.debug(f'spawning new process for rule_spool on {getpid()}')
         rule_loc = current_ruleset.iloc[idx]
         collasped_rule = [rule_loc.to_dict()]
@@ -117,10 +116,3 @@ class FireComply(FireStick):
         subset_df.drop(columns=['real_port'], inplace=True)
         subset_df.rename(columns={'real_source': 'source', 'real_destination': 'destination'}, inplace=True)
         return subset_df
-
-    def get_rule_hitcounts(self):
-        acp_id, acp_rule = self.retrieve_rule_objects()
-        self.fmc.policy.accesspolicy.operational.hitcounts()
-        acp_id = self.fmc.policy.accesspolicy.get(name=self.access_policy)
-        acp_id = acp_id['id']
-        acp_rules = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id)

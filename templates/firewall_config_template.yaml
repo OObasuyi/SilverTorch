@@ -43,6 +43,8 @@ cleanup: true
 rule_cleanup: true
 # if you want change the name of host objects to there DNS or IP attributes.
 object_cleanup: true
+# if you want to remove ZERO hit policies from ruleset. IF TRUE SPECIFY THE LOCATION OF THE RULES THAT NEED TO BE CLEANED
+delete_unused_rules: false
 # change the name of the network objects
 # resolve: whether you want IP or DNS as the new name value for indiuduval objects
 # group: change the whole name of the grouped objects defined by @rule_prepend_name
