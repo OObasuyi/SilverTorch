@@ -30,7 +30,9 @@ class FireComply(FireStick):
             current_ruleset.drop(columns=['src_z', 'dst_z', 'port', 'source', 'destination'], inplace=True)
             parsed_ruleset = []
             # TRY to use n-1 physical cores ( dont want anymore imports)
-            pool = Pool(int((cpu_count() / 2)) - 1)
+            core_group = int((cpu_count() / 2)) - 1
+            core_group = core_group if core_group > 0 else 1
+            pool = Pool(core_group)
 
             # internal func to collect subset_df
             def rule_gatherer_callback(data):
