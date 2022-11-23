@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
     # test check
     # weeper = FireBroom(access_policy='test12', ftd_host='10.11.6.191', fmc_host='10.11.6.60', rule_prepend_name='test_st_beta_2', zone_of_last_resort='outside_zone', same_cred=False)
-    # weeper.collapse_fmc_rules(comment='tester123')
+    # weeper.collapse_fw_rules(comment='tester123')
     # augWork.del_fmc_objects(type_='port',obj_type='all')
     # augWork.del_fmc_objects(type_='network',,obj_type='all')
     # augWork.del_fmc_objects(type_='network',obj_type='all')

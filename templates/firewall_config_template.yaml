@@ -31,11 +31,11 @@ ruleset_type: ALLOW
 # APPENDED COMMENT TO RULES
 rule_comment: None
 
-#/ TEST SECTION #
+#/ RULE MANAGEMENT
+stage_ippp: true
 # check to see if IPPP exist in the firewalls ruleset
 ippp_checkup: false
-#\ TEST SECTION #
-
+#/ RULE MANAGEMENT
 
 #/ CLEAN UP SECTION #
 cleanup: true
@@ -43,6 +43,8 @@ cleanup: true
 rule_cleanup: true
 # if you want change the name of host objects to there DNS or IP attributes.
 object_cleanup: true
+# if you want to remove ZERO hit policies from ruleset. IF TRUE SPECIFY THE LOCATION OF THE RULES THAT NEED TO BE CLEANED
+delete_unused_rules: false
 # change the name of the network objects
 # resolve: whether you want IP or DNS as the new name value for indiuduval objects
 # group: change the whole name of the grouped objects defined by @rule_prepend_name
@@ -56,6 +58,22 @@ remove_unused: false
 # recover old ACP file if the program crashed
 recovery_mode: false
 #\ CLEAN UP SECTION #
+
+#/ GENERAL INFORMATION FROM FIREWALLS
+# this will save all or specific rules from the firewall or management device
+save_rules: False
+# if you need to save specific rules it will use the "rule_prepend_name" mentioned above
+save_specific_rules: False
+# convert rules in a readable format
+pretty_rules: true
+# only get rules based on IP with this regex mapping
+specific_src_dst: '192.168.*|10\..*|218.17.85.*'
+#/ GENERAL INFORMATION FROM FIREWALLS
+
+
+#/ MODIFY EXISTING RULES
+mod_rules: false
+#/ MODIFY EXISTING RULES
 
 
 #/ OBJECT GENERATION AND IDENTIFICATION #

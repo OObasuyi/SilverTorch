@@ -1,5 +1,5 @@
 from datetime import datetime
-from re import split, match
+from re import split, match,sub
 
 from fw_deploy import FireStick
 from tqdm import tqdm
@@ -8,12 +8,13 @@ import pickle
 from os import replace
 from fw_test import FireCheck
 
-
 class FireBroom(FireStick):
     def __init__(self, configuration_data: dict, cred_file=None):
-        configuration_data['ippp_location'] = None
         super().__init__(configuration_data=configuration_data, cred_file=cred_file)
         self.rest_connection()
+        self.temp_dir = 'temp_rules'
+        self.dt_now = datetime.now().replace(microsecond=0).strftime("%Y_%m_%d_%H%_M%_S")
+        self.save_ext = 'rulbk'
 
     def is_prepend_naming_correct(self,name_of_obj):
         # check if it's a exact name match of the group
@@ -44,7 +45,8 @@ class FireBroom(FireStick):
         self.fmc_net_port_info()
         if not isinstance(self.rule_prepend_name, str):
             raise ValueError(f'self.rule_prepend_name value is not type str. you passed an {type(self.rule_prepend_name)} object')
-        self.utils.permission_check(f'Are you sure you want to delete {obj_type.upper()} ***{self.rule_prepend_name}*** {type_} objects?')
+        normalize_str = sub('[^A-Za-z0-9|\-|_]+',' ', str(obj_type).upper())
+        self.utils.permission_check(f'Are you sure you want to delete {normalize_str} ***{self.rule_prepend_name}*** {type_} objects?')
         if type_ == 'network':
             def net_delete():
                 del_list = [i[2] for i in self.net_data if self.is_prepend_naming_correct(i[0])] if self.rule_prepend_name != 'all' else [i[2] for i in self.net_data]
@@ -100,7 +102,14 @@ class FireBroom(FireStick):
 
         elif type_ == 'rule':
             acp_id, acp_rules = self.retrieve_rule_objects()
-            del_list = [i['name'] for i in acp_rules if self.rule_prepend_name in i['name']] if self.rule_prepend_name != 'all' else acp_rules
+            if isinstance(obj_type,str):
+                # deleting via kwrd rule name or 'all'
+                del_list = [i['name'] for i in acp_rules if self.rule_prepend_name in i['name']] if obj_type != 'all' else acp_rules
+            else:
+                # deleting via passed list object
+                # make sure rules exist in ruleset
+                del_list = [i['name'] for i in acp_rules if i['name'] in obj_type]
+
             for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {self.rule_prepend_name} rules'):
                 try:
                     self.fmc.policy.accesspolicy.accessrule.delete(container_uuid=acp_id, name=obj_id)
@@ -109,14 +118,16 @@ class FireBroom(FireStick):
         else:
             raise ValueError(f'type_ not found please select rule, port, or network. you passed {type_}')
 
-    def collapse_fmc_rules(self, comment: str = False, recover: bool = False):
-        temp_dir = 'temp_rules'
-        dt_now = datetime.now().replace(microsecond=0).strftime("%Y_%m_%d_%H%_M%_S")
-        save_ext = 'rulbk'
-        recovery_fname = f'{self.rule_prepend_name}_save_{dt_now}.{save_ext}'
-        recovery_loc = self.utils.create_file_path(temp_dir, recovery_fname)
-        if not isinstance(comment, str):
-            raise ValueError('COMMENT VALUE MUST BE PASSED')
+    @staticmethod
+    def backup_rules_op(acp_rules,recovery_loc):
+        rollback_acp = acp_rules.copy()
+        with open(recovery_loc, 'wb') as save_rule:
+            pickle.dump(rollback_acp, save_rule)
+
+    def prep_and_recover_fw_rules(self, recover: bool = False):
+        recovery_fname = f'{self.rule_prepend_name}_save_{self.dt_now}.{self.save_ext}'
+        recovery_loc = self.utils.create_file_path(self.temp_dir, recovery_fname)
+
         acp_id, acp_rules = self.retrieve_rule_objects()
         self.fmc_net_port_info()
         if not recover:
@@ -129,7 +140,7 @@ class FireBroom(FireStick):
         # there should only one file in this dir from last run
         if recover:
             self.logfmc.warning('entering recovery mode')
-            recovery_loc = self.utils.get_files_from_dir(temp_dir, save_ext)[0]
+            recovery_loc = self.utils.get_files_from_dir(self.temp_dir, self.save_ext)[0]
             with open(recovery_loc, 'rb') as save_rule:
                 rollback_acp = pickle.load(save_rule)
             self.logfmc.debug(f'recovered {recovery_loc} file')
@@ -137,14 +148,21 @@ class FireBroom(FireStick):
             # todo: need to let the user chose if they want to optimze the config are just insert the old config from the recover file
         else:
             # in case we fail our rule test or error happens while processing
-            rollback_acp = acp_rules.copy()
-            with open(recovery_loc, 'wb') as save_rule:
-                pickle.dump(rollback_acp, save_rule)
+            self.backup_rules_op(acp_rules,recovery_loc)
 
         for col in acp_rules.columns:
             acp_rules[col] = acp_rules[col].apply(lambda x: tuple(v for v in x) if isinstance(x, list) else x)
-        # fill in vals that are really any
+            # fill in vals that are really any
         acp_rules.replace({None: 'any'}, inplace=True)
+
+        return acp_rules,acp_id,recovery_fname,recovery_loc
+
+    def collapse_fw_rules(self, comment: str = False, recover: bool = False):
+        if not isinstance(comment, str):
+            raise ValueError('COMMENT VALUE MUST BE PASSED')
+        # DRP the fw rules
+        acp_rules,acp_id,recovery_fname,recovery_loc = self.prep_and_recover_fw_rules(recover)
+
         # collapse FW rules by zone
         grouped_rules = acp_rules.groupby(['src_z', 'dst_z'])
         gpl = grouped_rules.size()[grouped_rules.size() > 0].index.values.tolist()
@@ -296,6 +314,26 @@ class FireBroom(FireStick):
                             counter += 1
                         else:
                             raise NotImplementedError('grouped cleaned issue')
+
+    def remove_non_hit_rules(self):
+        if not self.config_data.get('delete_unused_rules'):
+            self.logfmc.error('NO HITCOUNT CSV TO ANALYZE')
+            return
+        else:
+            file_name = self.config_data.get('delete_unused_rules')
+
+        # open hitcount CSV
+        fname = self.utils.create_file_path('archive/non_hit_rules',file_name)
+        non_hit_rules = pd.read_csv(fname)
+
+        # make sure all hit counts are 0
+        non_hit_rules_names = non_hit_rules['Rule Name'][non_hit_rules["Hit Count"] == 0].tolist()
+
+        # send rules for deletion
+        self.del_fmc_objects(type_='rule',obj_type=non_hit_rules_names)
+
+
+
 
     def rollback_acp_op(self, rollback_pd, acp_id, comment: str = False):
         rollback_pd.rename(columns={'src_z': 'source_zone', 'dst_z': 'destination_zone', 'source': 'source_network', 'destination': 'destination_network'}, inplace=True)

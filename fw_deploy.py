@@ -50,7 +50,7 @@ class FireStick:
         self.ftd_password = creds['ftd_password']
         self.domain = configuration_data.get('domain')
         # some calls might not need a ippp file
-        if configuration_data.get('ippp_location') is not None:
+        if configuration_data.get('ippp_location'):
             # this is just a check the file MUST be the folder
             self.ippp_location = self.utils.create_file_path('ingestion', configuration_data.get('ippp_location'))
         self.access_policy = configuration_data.get('access_policy')
@@ -108,8 +108,8 @@ class FireStick:
         acp_rules = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id)
         return acp_id, acp_rules
 
-    def transform_rulesets(self,ruleset=None,save=False,save_all=False):
-        if save:
+    def transform_rulesets(self,proposed_rules=None,save_current_ruleset=False):
+        if save_current_ruleset:
             self.rest_connection()
             self.fmc_net_port_info()
 
@@ -130,40 +130,38 @@ class FireStick:
         current_ruleset = self.utils.transform_acp(current_ruleset,self)
         if len(current_ruleset) < 1:
             self.logfmc.error('nothing in current ruleset')
-            return ruleset,None,acp_id
+            return proposed_rules,None,acp_id
 
         self.logfmc.warning("getting real IPs from named network objects")
         for ip in ['source', 'destination']:
             current_ruleset[f'real_{ip}'] = current_ruleset[ip].apply(lambda p: self.fdp_grouper(p, 'ip'))
-            if ruleset is not None:
-                ruleset[f'real_{ip}'] = ruleset[f'{ip}_network'].apply(lambda p: self.fdp_grouper(p, 'ip'))
+            if proposed_rules is not None:
+                proposed_rules[f'real_{ip}'] = proposed_rules[f'{ip}_network'].apply(lambda p: self.fdp_grouper(p, 'ip'))
 
         self.logfmc.warning("getting real ports-protocols from named port objects")
         current_ruleset['real_port'] = current_ruleset['port'].apply(lambda p: self.fdp_grouper(p, 'port'))
-        if ruleset is not None:
-            ruleset['real_port'] = ruleset['port'].apply(lambda p: self.fdp_grouper(p, 'port'))
+        if proposed_rules is not None:
+            proposed_rules['real_port'] = proposed_rules['port'].apply(lambda p: self.fdp_grouper(p, 'port'))
 
         # remove nan values with any
         current_ruleset.fillna(value='any', inplace=True)
         current_ruleset.replace({'None': 'any'}, inplace=True)
 
         # make sure we are matching by list type and sorting correctly even if its a list object
-        if ruleset is not None:
-            for col in ruleset.columns:
-                ruleset[col] = ruleset[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple, list)) else x)
+        if proposed_rules is not None:
+            for col in proposed_rules.columns:
+                proposed_rules[col] = proposed_rules[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple, list)) else x)
         for col in current_ruleset.columns:
             current_ruleset[col] = current_ruleset[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple, list)) else x)
 
-        if ruleset is not None:
-            ruleset.fillna(value='any', inplace=True)
-        if save:
-            if save_all:
-                save_name = self.utils.create_file_path('saved_rules',f'all_rules_{self.access_policy}.csv')
-            else:
-                save_name = self.utils.create_file_path('saved_rules', f'{self.rule_prepend_name}_rules_{self.access_policy}.csv')
-            current_ruleset.to_csv(save_name,index=False)
-        if ruleset is not None:
-            return ruleset,current_ruleset,acp_id
+        # save rules
+        if save_current_ruleset:
+            return current_ruleset
+
+        # pipeline rules
+        if proposed_rules is not None:
+            proposed_rules.fillna(value='any', inplace=True)
+            return proposed_rules,current_ruleset,acp_id
 
     @staticmethod
     def _ip_address_check(x):
@@ -194,7 +192,8 @@ class FireStick:
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
         fpath = self.utils.create_file_path('CNI', f'{self.rule_prepend_name}_non_applicable_protocols_{dt_now}.csv')
         if not na_protos.empty:
-            self.logfmc.warning(f'found protocols that cannot be used with this script\n Please enter them manually\n file location: {fpath}')
+            self.logfmc.warning('found protocols that cannot be used with this script. Please enter them manually')
+            self.logfmc.warning(f'PROTOCOLS NOT IMPLEMENTED LOCATED AT FILE LOCATION: {fpath}')
             # make sure the user sees the msg with no input.
             sleep(2)
             na_protos.to_csv(fpath, index=False)
@@ -455,7 +454,7 @@ class FireStick:
                 return sorted(list(set(f"{px[1]}:{px[2]}" for rulep in p for px in self.port_data if rulep == px[0])))
 
     def find_inter_dup_policies(self, ruleset):
-        ruleset, current_ruleset,acp_id = self.transform_rulesets(ruleset=ruleset)
+        ruleset, current_ruleset, acp_id = self.transform_rulesets(proposed_rules=ruleset)
 
         if current_ruleset is not None:
             # remove rules that are dups
@@ -535,6 +534,11 @@ class FireStick:
         return ruleset,acp_id
 
     def get_zone_from_ip(self, type_, i):
+        # drop 0.0.0.0 so we dont get the outside zone matching due to it being a wildcard
+        normalized_zone_ip_info = self.zone_ip_info.copy()
+        normalized_zone_ip_info = normalized_zone_ip_info[normalized_zone_ip_info['IP'] != "0.0.0.0"]
+        normalized_zone_ip_info.reset_index(inplace=True,drop=True)
+
         if self.ippp[type_][i] == 'any':
             return {f"{type_}_zone": 'any', f'{type_}_network': 'any'}
         elif self.zbr_bypass is not None:
@@ -544,13 +548,13 @@ class FireStick:
         ippp_subnet = ip_network(self.ippp[type_][i])
         # if we need to find where a host address lives exactly
         if '/' not in self.ippp[type_][i] or '/32' in self.ippp[type_][i]:
-            for p in self.zone_ip_info.index:
-                asp_subnet = self.zone_ip_info['ip_cidr'][p]
+            for p in normalized_zone_ip_info.index:
+                asp_subnet = normalized_zone_ip_info['ip_cidr'][p]
                 if ippp_subnet.subnet_of(ip_network(asp_subnet)):
-                    return {f"{type_}_zone": self.zone_ip_info['ZONE'][p], f'{type_}_network': self.ippp[f'fmc_name_{type_}'][i]}
+                    return {f"{type_}_zone": normalized_zone_ip_info['ZONE'][p], f'{type_}_network': self.ippp[f'fmc_name_{type_}'][i]}
         # if we need to find all zones a subnet might reside
         elif '/' in self.ippp[type_][i]:
-            zone_group = tuple(list(set([self.zone_ip_info['ZONE'][p] for p in self.zone_ip_info.index if ip_network(self.zone_ip_info['ip_cidr'][p]).subnet_of(ippp_subnet)])))
+            zone_group = tuple(list(set([normalized_zone_ip_info['ZONE'][p] for p in normalized_zone_ip_info.index if ippp_subnet.subnet_of(ip_network(normalized_zone_ip_info['ip_cidr'][p]))])))
             if len(zone_group) != 0:
                 zone_group = zone_group if len(zone_group) > 1 else zone_group[0]
                 return {f"{type_}_zone": zone_group, f'{type_}_network': self.ippp[f'fmc_name_{type_}'][i]}
@@ -567,7 +571,7 @@ class FireStick:
             if not isinstance(self.zbr_bypass, dict):
                 raise TypeError(f'zbr_bypass is a {type(self.zbr_bypass)} object not dict')
 
-    def create_acp_rule(self):
+    def standardize_ippp(self):
         ruleset = []
         self.zbr_bypass_check()
         # sort rules in a pretty format
@@ -588,7 +592,12 @@ class FireStick:
         # if there all the same zone then we got nothing to find dups of
         if ruleset.empty:
             raise Exception('NOTHING IN RULESET THEY MIGHT ALL BE THE SAME ZONE')
-        ruleset,acp_id = self.find_inter_dup_policies(ruleset)
+        return ruleset
+
+    def create_acp_rule(self):
+        # get ruleset
+        ruleset = self.standardize_ippp()
+        ruleset, acp_id = self.find_inter_dup_policies(ruleset)
 
         # if we removed all the dups and we have no new rules or for some reason we dont have rules to deploy raise to stop the program
         try:
@@ -837,7 +846,7 @@ class FireStick:
         self.rest_connection(reset=True)
         ffc = FireCheck(self)
         if checkup:
-            if 'strict_checkup' in self.config_data and self.config_data.get('strict_checkup'):
+            if self.config_data.get('strict_checkup'):
                 literal_ippp = self.ippp.copy()
                 literal_ippp['port'] = literal_ippp['protocol'] + ':' + literal_ippp['port']
                 self.ippp = literal_ippp

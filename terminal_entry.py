@@ -1,7 +1,9 @@
 from argparse import ArgumentParser
 
 from fw_cleanup import FireBroom
+from fw_compliance import FireComply
 from fw_deploy import FireStick
+from fw_modify import FireHands
 from utilites import Util
 
 
@@ -21,19 +23,42 @@ def terminal_entry():
     if config_file.get('ruleset_type') not in ['ALLOW', 'DENY']:
         raise ValueError('RuleSet_type must be either allow or deny')
 
+    # clean up
     if config_file.get('cleanup'):
         fb = FireBroom(cred_file=args.cred_file, configuration_data=config_file)
+        # rule cleanup
         if config_file.get('rule_cleanup'):
-            fb.collapse_fmc_rules(comment=config_file.get('rule_comment'), recover=config_file.get('recovery_mode'))
-
+            fb.collapse_fw_rules(comment=config_file.get('rule_comment'), recover=config_file.get('recovery_mode'))
+        # objects cleanup
         if config_file.get('object_cleanup'):
             fb.clean_object_store(clean_type=config_file.get('clean_type'))
-    else:
+        # delete ununsed rules
+        if config_file.get('delete_unused_rules'):
+            fb.remove_non_hit_rules()
+        return
+
+    # check rule consistency or deploy new rules
+    if config_file.get('stage_ippp') or config_file.get('ippp_checkup'):
         fm = FireStick(cred_file=args.cred_file, configuration_data=config_file)
         if config_file.get('ippp_checkup'):
+            # check if IPPP is in current ruleset
             fm.policy_deployment_flow(checkup=True)
-        else:
+        elif config_file.get('stage_ippp'):
+            # standard policy deployment
             fm.policy_deployment_flow()
+        return
+
+    # save CURRENT rules to disk
+    if config_file.get('save_rules'):
+        fm = FireComply(cred_file=args.cred_file, configuration_data=config_file)
+        fm.export_current_policy()
+        return
+
+    # modify existing rules
+    if config_file.get('mod_rules'):
+        fh = FireHands(cred_file=args.cred_file, configuration_data=config_file)
+        fh.modify_ruleset()
+        return
 
 
 if __name__ == "__main__":
