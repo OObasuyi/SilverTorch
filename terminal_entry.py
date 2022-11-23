@@ -1,6 +1,7 @@
 from argparse import ArgumentParser
 
 from fw_cleanup import FireBroom
+from fw_compliance import FireComply
 from fw_deploy import FireStick
 from fw_modify import FireHands
 from utilites import Util
@@ -46,7 +47,7 @@ def terminal_entry():
 
     # save CURRENT rules to disk
     if config_file.get('save_rules'):
-        fm = FireStick(cred_file=args.cred_file, configuration_data=config_file)
+        fm = FireComply(cred_file=args.cred_file, configuration_data=config_file)
         fm.export_current_policy()
         return
 
