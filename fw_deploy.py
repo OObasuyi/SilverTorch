@@ -2,7 +2,7 @@ import json
 from copy import deepcopy
 from datetime import datetime
 from ipaddress import IPv4Network, ip_network
-from re import search, sub
+from re import search, sub, match
 from time import sleep
 from socket import gethostbyaddr
 
@@ -188,7 +188,8 @@ class FireStick:
         for col in ippp.columns:
             ippp[col] = ippp[col].apply(lambda x: x.strip())
         # check if we have acceptable protocol for the API
-        na_protos = ippp[~ippp['protocol'].str.contains('TCP|UDP', regex=True)]
+        ippp['protocol'] = ippp['protocol'].apply(lambda x: str(x).upper())
+        na_protos = ippp[~ippp['protocol'].str.contains('TCP|UDP|ANY', regex=True)]
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
         fpath = self.utils.create_file_path('CNI', f'{self.rule_prepend_name}_non_applicable_protocols_{dt_now}.csv')
         if not na_protos.empty:
@@ -197,13 +198,13 @@ class FireStick:
             # make sure the user sees the msg with no input.
             sleep(2)
             na_protos.to_csv(fpath, index=False)
-        ippp = ippp[ippp['protocol'].str.contains('TCP|UDP', regex=True)]
+        ippp = ippp[ippp['protocol'].str.contains('TCP|UDP|ANY', regex=True)]
         # remove non-alphanumeric chars from str if protocol take udp or tcp from str
         for col in ['service', 'protocol','port_range_low','port_range_high']:
             if col in ['service', 'protocol']:
                 ippp[col] = ippp[col].apply(lambda x: sub('[^0-9a-zA-Z]+', '_', x))
                 if col == 'protocol':
-                    ippp[col] = ippp[col].apply(lambda x: [i.split()[0] for i in x.split('_') if i == 'TCP' or i == 'UDP'][0])
+                    ippp[col] =  ippp[col].apply(lambda x: next(i.split()[0] for i in x.split('_')) if match('TCP|UDP',x) else x)
             # remove trailing zero from float -> str convert
             elif col in ['port_range_low','port_range_high']:
                 ippp[col] = ippp[col].apply(lambda x: x.split('.0')[0] if x != 'nan' else x)
