@@ -7,14 +7,14 @@ from tqdm import tqdm
 class FireCheck:
 
     def __init__(self,af_class):
-        self.copy_class = af_class
-        self.logfmc = self.copy_class.logfmc
+        self.fire_class = af_class
+        self.logfmc = self.fire_class.logfmc
 
     def _fix_ippp_data(self):
         # todo: need to grab ports if already in device and sub them out incase its incorrect on the ippp
-        self.copy_class.zbr_bypass_check()
-        test_ippp = self.copy_class.ippp[['source', 'destination', 'protocol', 'port']]
-        for port_info in self.copy_class.port_data:
+        self.fire_class.zbr_bypass_check()
+        test_ippp = self.fire_class.ippp[['source', 'destination', 'protocol', 'port']]
+        for port_info in self.fire_class.port_data:
             port_protco = test_ippp[(test_ippp['port'] == port_info[2]) & (test_ippp['protocol'] == port_info[1])]
             if not port_protco.empty:
                 test_ippp['port'].loc[(test_ippp['port'] == port_info[2]) & (test_ippp['protocol'] == port_info[1])] = port_info[0]
@@ -22,8 +22,8 @@ class FireCheck:
         same_zone_counter = 0
         for i in test_ippp.index:
             rule_flow = {}
-            src_flow = self.copy_class.get_zone_from_ip('source', i)
-            dst_flow = self.copy_class.get_zone_from_ip('destination', i)
+            src_flow = self.fire_class.get_zone_from_ip('source', i)
+            dst_flow = self.fire_class.get_zone_from_ip('destination', i)
             # block double zone
             if src_flow["source_zone"] == dst_flow["destination_zone"]:
                 same_zone_counter += 0
@@ -41,20 +41,20 @@ class FireCheck:
         if fix_ippp:
             test_ippp = self._fix_ippp_data()
         else:
-            test_ippp = self.copy_class.ippp
+            test_ippp = self.fire_class.ippp
 
-        acp_id = self.copy_class.fmc.policy.accesspolicy.get(name=self.copy_class.access_policy)
-        acp_rules = self.copy_class.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id['id'])
-        acp_rules = self.copy_class.utils.transform_acp(acp_rules, self.copy_class)
+        acp_id = self.fire_class.fmc.policy.accesspolicy.get(name=self.fire_class.access_policy)
+        acp_rules = self.fire_class.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id['id'])
+        acp_rules = self.fire_class.transform_acp(acp_rules)
         for col in test_ippp.columns:
             test_ippp[col] = test_ippp[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple, list)) else x)
         for col in acp_rules.columns:
             acp_rules[col] = acp_rules[col].apply(lambda x: sorted(list(v for v in x)) if isinstance(x, (tuple, list)) else x)
 
         for ip in ['source_network', 'destination_network']:
-            test_ippp[ip] = test_ippp[ip].apply(lambda p: self.copy_class.fdp_grouper(p, 'ip'))
+            test_ippp[ip] = test_ippp[ip].apply(lambda p: self.fire_class.fdp_grouper(p, 'ip'))
         for ip in ['destination', 'source']:
-            acp_rules[ip] = acp_rules[ip].apply(lambda p: self.copy_class.fdp_grouper(p, 'ip'))
+            acp_rules[ip] = acp_rules[ip].apply(lambda p: self.fire_class.fdp_grouper(p, 'ip'))
 
         acp_rules.replace({None: 'any'}, inplace=True)
         test_ippp.replace({None: 'any'}, inplace=True)
@@ -147,7 +147,7 @@ class FireCheck:
         #  such as RULE1: x.x.x.1 > x.x.x.2 over 9000 and RULE2: any > x.x.x.2 over 9000 with the same other info would cause this to happen
         if len(found_in_policy) < len(test_ippp):
             dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
-            not_found_rules = self.copy_class.utils.create_file_path(folder='404_rules',file_name=f'{self.copy_class.rule_prepend_name}_orphaned_rules_{dt_now}.csv')
+            not_found_rules = self.fire_class.utils.create_file_path(folder='404_rules', file_name=f'{self.fire_class.rule_prepend_name}_orphaned_rules_{dt_now}.csv')
             test_ippp.drop(found_in_policy,inplace=True)
             test_ippp.reset_index(inplace=True, drop=True)
             test_ippp.to_csv(not_found_rules, index=False)
