@@ -131,7 +131,7 @@ class FireBroom(FireStick):
         acp_id, acp_rules = self.retrieve_rule_objects()
         self.fmc_net_port_info()
         if not recover:
-            acp_rules = self.utils.transform_acp(acp_rules, self)
+            acp_rules = self.transform_acp(acp_rules)
             acp_rules = acp_rules[acp_rules['policy_name'].str.startswith(self.rule_prepend_name)]
             # no rule test
             if acp_rules.empty:

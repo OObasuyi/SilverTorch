@@ -3,7 +3,7 @@ import logging
 from functools import wraps
 from json import load, dump
 from logging.handlers import TimedRotatingFileHandler
-from os import path, makedirs, replace,rename, remove,walk
+from os import path, makedirs, replace, rename, remove, walk
 from shutil import make_archive
 
 import pandas as pd
@@ -19,7 +19,7 @@ class Util:
         return pd.read_csv(csv_file).to_dict()
 
     @staticmethod
-    def try_block(val,output_msg=False,return_val=None):
+    def try_block(val, output_msg=False, return_val=None):
         try:
             return val
         except Exception as error:
@@ -28,9 +28,9 @@ class Util:
             return return_val
 
     @staticmethod
-    def create_file_path(folder:str,file_name:str):
+    def create_file_path(folder: str, file_name: str):
         TOP_DIR = path.dirname(path.abspath(__file__))
-        allowed_exts = ['csv','log','txt','json','rulbk','yaml']
+        allowed_exts = ['csv', 'log', 'txt', 'json', 'rulbk', 'yaml']
 
         input_ext = '.'.join(file_name.split(".")[1:])
         if input_ext.lower() not in allowed_exts:
@@ -43,14 +43,13 @@ class Util:
         # move file to correct dir if needed
         if not path.exists(fName):
             try:
-                replace(f'{TOP_DIR}/{file_name}',fName)
+                replace(f'{TOP_DIR}/{file_name}', fName)
             except:
                 # file has yet to be created or not in top path
                 pass
         return fName
 
     def pull_creds(self, type_, rmdata=False):
-
         def _pull_cred_helper(type_):
             username_input = input("USERNAME:")
             userpasswd_input = input("PASSWORD:")
@@ -72,8 +71,8 @@ class Util:
                 return cdump[type_]
 
         try:
-            cred_file = self.create_file_path('safe','cred_store.json')
-            with open(cred_file,'r') as cf:
+            cred_file = self.create_file_path('safe', 'cred_store.json')
+            with open(cred_file, 'r') as cf:
                 cdict = load(cf)
             if rmdata:
                 for k in cdict['secret_stuff']:
@@ -90,9 +89,9 @@ class Util:
             return _internal_pull_creds_02(cdict)
 
     @staticmethod
-    def permission_check(deploy_msg:str):
+    def permission_check(deploy_msg: str):
         logc = log_collector()
-        if not isinstance(deploy_msg,str):
+        if not isinstance(deploy_msg, str):
             raise ValueError(f'deploy_msg value is not type str. you passed an {type(deploy_msg)} object')
 
         warn_msg = f'{deploy_msg}.\nENTER c TO CONTINUE'
@@ -103,7 +102,7 @@ class Util:
                 break
 
     @staticmethod
-    def rename_ippp_instances(f_name:str,replace_with_list:list,to_look_for:str,col_to_process_list:list,return_pd=False):
+    def rename_ippp_instances(f_name: str, replace_with_list: list, to_look_for: str, col_to_process_list: list, return_pd=False):
         """renames instances where the IPPP(ip port & protocol) sheet has an unwanted attribute. IE. rename all instances from a col where row == 'intranet-IPs' with '192.168.1.0/24' """
         old_pd = pd.read_csv(f_name)
         new_changes = old_pd.copy()
@@ -114,81 +113,16 @@ class Util:
                     for replace_with in replace_with_list:
                         nsc_pd = non_selected_cols.loc[x].to_dict()
                         nsc_pd[col] = replace_with
-                        new_changes = new_changes.append(nsc_pd,ignore_index=True)
+                        new_changes = new_changes.append(nsc_pd, ignore_index=True)
             new_changes.drop_duplicates(inplace=True)
             new_changes = new_changes[new_changes[col] != to_look_for]
         if return_pd:
             return new_changes
         else:
-            new_changes.to_csv(f_name,index=False)
+            new_changes.to_csv(f_name, index=False)
 
     @staticmethod
-    def transform_acp(current_ruleset,self_instance):
-        changed_ruleset = []
-        for i in current_ruleset:
-            subset_rule = {}
-            subset_rule['policy_name'] = i.get('name')
-            subset_rule['action'] = i.get('action')
-            subset_rule['src_z'] = self_instance.find_nested_group_objects(i.get('sourceZones'))
-            subset_rule['dst_z'] = self_instance.find_nested_group_objects(i.get('destinationZones'))
-            subset_rule['source'] = self_instance.find_nested_group_objects(i.get('sourceNetworks'))
-            subset_rule['destination'] = self_instance.find_nested_group_objects(i.get('destinationNetworks'))
-            subset_rule['port'] = self_instance.find_nested_group_objects(i.get('destinationPorts'))
-            if 'strict_checkup' in self_instance.config_data and self_instance.config_data.get('strict_checkup'):
-                strict_holder = []
-                # changed to get since port can be NONE value AKA 'any' in the Rules
-
-                if i.get('destinationPorts') is not None:
-                    real_dst_ports = i.get('destinationPorts')
-                    for k in real_dst_ports.keys():
-                        if k == 'literals':
-                            for port_item in real_dst_ports[k]:
-                                if port_item.get('port') is not None:
-                                    if port_item.get('protocol') == '6':
-                                        real_port = f'TCP:{port_item.get("port")}'
-                                        strict_holder.append(real_port)
-                                    elif port_item.get('protocol') == '17':
-                                        real_port = f'UDP:{port_item.get("port")}'
-                                        strict_holder.append(real_port)
-                        elif k == 'objects':
-                            for obj_item in real_dst_ports[k]:
-                                if obj_item.get('type') == 'ProtocolPortObject':
-                                    for port_item in self_instance.port_data:
-                                        if port_item[0] == obj_item['name']:
-                                            real_port = [f'{port_item[1]}:{port_item[2]}']
-                                            strict_holder.append(real_port)
-                                elif obj_item.get('type') == 'PortObjectGroup':
-                                    for port_item in self_instance.port_group_object:
-                                        if port_item[0] == obj_item['name']:
-                                            # recurvsly look through the port objects for its names and get real port mapping from the port_data
-                                            for port_list_item in port_item[1]:
-                                                for port_item in self_instance.port_data:
-                                                    if port_item[0] == port_list_item[0]:
-                                                        real_port = [f'{port_item[1]}:{port_item[2]}']
-                                                        strict_holder.append(real_port)
-                    if len(strict_holder) == 1:
-                        if not isinstance(next(iter(strict_holder)),list):
-                            subset_rule['real_port'] = strict_holder[0]
-                        else:
-                            subset_rule['real_port'] = [i for i in strict_holder[0]]
-                    else:
-                        save_list = []
-                        for i in strict_holder:
-                            if isinstance(i,list):
-                                for inner_i in i:
-                                    save_list.append(inner_i)
-                            else:
-                                save_list.append(i)
-                        subset_rule['real_port'] = save_list
-                else:
-                    subset_rule['real_port'] = None
-
-            changed_ruleset.append(subset_rule)
-        current_ruleset = changed_ruleset
-        return pd.DataFrame(current_ruleset)
-
-    @staticmethod
-    def get_files_from_dir(folder,look_for_ext):
+    def get_files_from_dir(folder, look_for_ext):
         dir_path = path.join(TOP_DIR, folder)
         _, _, filenames = next(walk(dir_path))
         return [path.join(dir_path, file) for file in filenames if file.endswith(look_for_ext)]
@@ -205,8 +139,13 @@ class Util:
                 quit()
 
     @staticmethod
-    def zip_files(output_filename,dir_name):
+    def zip_files(output_filename, dir_name):
         make_archive(output_filename, 'zip', dir_name)
+
+    @staticmethod
+    def highlight_important_message(msg: str, n_stars: int = 6):
+        num_stars = "*" * n_stars
+        return f'{num_stars}{msg}{num_stars}'
 
 
 def deprecated(func):
@@ -217,6 +156,7 @@ def deprecated(func):
     def wrapper(*args):
         logc.warning(f'the {fname} function is deprecated and will be removed in future releases')
         return func(*args)
+
     return wrapper
 
 

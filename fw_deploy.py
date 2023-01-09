@@ -2,7 +2,7 @@ import json
 from copy import deepcopy
 from datetime import datetime
 from ipaddress import IPv4Network, ip_network
-from re import search, sub
+from re import search, sub, match
 from time import sleep
 from socket import gethostbyaddr
 
@@ -12,7 +12,7 @@ from netmiko import ConnectHandler
 from tqdm import tqdm
 
 from fw_test import FireCheck
-from utilites import Util, deprecated,log_collector
+from utilites import Util, deprecated, log_collector
 
 pd.options.display.max_columns = None
 pd.options.display.max_rows = None
@@ -21,7 +21,7 @@ pd.options.mode.chained_assignment = None
 
 class FireStick:
 
-    def __init__(self, configuration_data:dict,cred_file=None):
+    def __init__(self, configuration_data: dict, cred_file=None):
         """
         @param cred_file: JSON file hosting user/pass information DEPRECATED
         @param configuration_data: KEY_fmc_host: FMC domain or IP address
@@ -108,7 +108,7 @@ class FireStick:
         acp_rules = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id)
         return acp_id, acp_rules
 
-    def transform_rulesets(self,proposed_rules=None,save_current_ruleset=False):
+    def transform_rulesets(self, proposed_rules=None, save_current_ruleset=False):
         if save_current_ruleset:
             self.rest_connection()
             self.fmc_net_port_info()
@@ -125,12 +125,13 @@ class FireStick:
                 else:
                     out[key] = val
             return out
+
         # find existing policy in fmc
         acp_id, current_ruleset = self.retrieve_rule_objects()
-        current_ruleset = self.utils.transform_acp(current_ruleset,self)
+        current_ruleset = self.transform_acp(current_ruleset)
         if len(current_ruleset) < 1:
             self.logfmc.error('nothing in current ruleset')
-            return proposed_rules,None,acp_id
+            return proposed_rules, None, acp_id
 
         self.logfmc.warning("getting real IPs from named network objects")
         for ip in ['source', 'destination']:
@@ -161,7 +162,7 @@ class FireStick:
         # pipeline rules
         if proposed_rules is not None:
             proposed_rules.fillna(value='any', inplace=True)
-            return proposed_rules,current_ruleset,acp_id
+            return proposed_rules, current_ruleset, acp_id
 
     @staticmethod
     def _ip_address_check(x):
@@ -176,7 +177,7 @@ class FireStick:
         except:
             return x.split('/')[0]
 
-    def retrieve_ippp(self,ippp):
+    def retrieve_ippp(self, ippp):
         ippp = ippp.astype(str)
         ippp = ippp[ippp['source'] != 'nan']
         for origin in ['source', 'destination']:
@@ -188,75 +189,104 @@ class FireStick:
         for col in ippp.columns:
             ippp[col] = ippp[col].apply(lambda x: x.strip())
         # check if we have acceptable protocol for the API
-        na_protos = ippp[~ippp['protocol'].str.contains('TCP|UDP', regex=True)]
+        ippp['protocol'] = ippp['protocol'].apply(lambda x: str(x).upper())
+        na_protos = ippp[~ippp['protocol'].str.contains('TCP|UDP|ANY', regex=True)]
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
         fpath = self.utils.create_file_path('CNI', f'{self.rule_prepend_name}_non_applicable_protocols_{dt_now}.csv')
         if not na_protos.empty:
-            self.logfmc.warning('found protocols that cannot be used with this script. Please enter them manually')
+            self.logfmc.warning(self.utils.highlight_important_message('found protocols that cannot be used with this script. Please enter them manually'))
             self.logfmc.warning(f'PROTOCOLS NOT IMPLEMENTED LOCATED AT FILE LOCATION: {fpath}')
             # make sure the user sees the msg with no input.
             sleep(2)
             na_protos.to_csv(fpath, index=False)
-        ippp = ippp[ippp['protocol'].str.contains('TCP|UDP', regex=True)]
+        ippp = ippp[ippp['protocol'].str.contains('TCP|UDP|ANY', regex=True)]
         # remove non-alphanumeric chars from str if protocol take udp or tcp from str
-        for col in ['service', 'protocol','port_range_low','port_range_high']:
+        for col in ['service', 'protocol', 'port_range_low', 'port_range_high']:
             if col in ['service', 'protocol']:
                 ippp[col] = ippp[col].apply(lambda x: sub('[^0-9a-zA-Z]+', '_', x))
                 if col == 'protocol':
-                    ippp[col] = ippp[col].apply(lambda x: [i.split()[0] for i in x.split('_') if i == 'TCP' or i == 'UDP'][0])
+                    ippp[col] = ippp[col].apply(lambda x: next(i.split()[0] for i in x.split('_')) if match('TCP|UDP', x) else x)
             # remove trailing zero from float -> str convert
-            elif col in ['port_range_low','port_range_high']:
+            elif col in ['port_range_low', 'port_range_high']:
                 ippp[col] = ippp[col].apply(lambda x: x.split('.0')[0] if x != 'nan' else x)
         return ippp
 
-    def fix_csv_file(self,ippp):
-        pass
-
     def find_dup_services(self):
         fixing_holder = []
+        should_preproc = self.config_data.get('preprocess_csv')
         service_grouping = self.ippp.groupby(['service'])
         sg_listing = service_grouping.size()[service_grouping.size() > 1].index.values.tolist()
         for gl in sg_listing:
             group = service_grouping.get_group(gl)
             # check if we have inconsistent port-to-service matching
-            have_dup = group[['service', 'port']].drop_duplicates()
+            have_dup = group[['service', 'port','protocol']].drop_duplicates()
             if have_dup.shape[0] >= 2:
                 fixing_holder.append(have_dup.to_dict('r'))
         if len(fixing_holder) > 0:
             # un-nest list
             fixing_holder = [l2 for l1 in fixing_holder for l2 in l1]
             dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
-            fname = self.utils.create_file_path('CNI',f'{self.rule_prepend_name}_port_to_service_mismatch_{dt_now}.csv')
-            pd.DataFrame(fixing_holder).to_csv(fname,index=False)
-            self.logfmc.critical('Please Check IPPP for inconsistencies.. found multiple services matching to varying ports')
-            self.logfmc.critical(f'mismatched items saved to {fname}')
-            raise NotImplementedError('placeholder for next update')
+            fname = self.utils.create_file_path('CNI', f'{self.rule_prepend_name}_port_to_service_mismatch_{dt_now}.csv')
+            pd.DataFrame(fixing_holder).to_csv(fname, index=False)
 
-    def fix_port_range_objects(self):
-        # drop trailing decimal point from str conversion
-        self.ippp['port_range_low'] = self.ippp['port_range_low'].apply(lambda x: x.split('.')[0])
-        self.ippp['port_range_high'] = self.ippp['port_range_high'].apply(lambda x: x.split('.')[0])
-        # take care range ports
-        self.ippp['port'] = 0
-        for i in self.ippp.index:
-            # catch any any clause
-            if self.ippp['port_range_low'][i] in ['nan', '0', '65535', 'any'] and self.ippp['port_range_high'][i] in ['nan', '0', '65535', 'any']:
-                self.ippp['port_range_high'][i] = self.ippp['port_range_low'][i] = 'any'
-            elif self.ippp['port_range_high'][i] in ['nan', '0', '65535', 'any'] and self.ippp['port_range_low'][i] in ['nan', '0', '65535', 'any']:
-                self.ippp['port_range_high'][i] = self.ippp['port_range_low'][i] = self.ippp['port_range_high'][i] = 'any'
-            # if the rows has nothing in the adjacent col copy from the other row. (this avoids nan bug)
-            if self.ippp['port_range_high'][i] in ['nan']:
-                self.ippp['port_range_high'][i] = self.ippp['port_range_low'][i]
-            elif self.ippp['port_range_low'][i] in ['nan']:
-                self.ippp['port_range_low'][i] = self.ippp['port_range_high'][i]
-            # if port is a range append range symbol
-            if self.ippp['port_range_low'][i] != self.ippp['port_range_high'][i]:
-                self.ippp['port'].loc[i] = self.ippp['port_range_low'][i] + '-' + self.ippp['port_range_high'][i]
+            # preprocess IPPP
+            if should_preproc:
+                preproc_fname = self.utils.create_file_path('preproc', self.config_data.get('preprocess_csv'))
+                preproc_df = pd.read_csv(preproc_fname)
+                preproc_df = self.fix_port_range_objects(preproc_df)
+
+                # get all the port mismatch findings from the holder
+                for i in fixing_holder:
+                    correct_match = preproc_df['service'][(preproc_df['port']== i['port']) & (preproc_df['protocol']== i['protocol'])]
+                    # if we dont have a mapping then we cant continue since we would not know how to create this object in the manager
+                    if correct_match.empty:
+                        missed_mapping = f"{i['port']}:{i['protocol']}"
+                        self.logfmc.critical(self.utils.highlight_important_message(f'NO MAPPING FOR {missed_mapping}. PLEASE CREATING MAPPING AND RESTART ENGINE'))
+                        self.logfmc.critical(f'mismatched items saved to {fname}')
+                        quit()
+
+                    # take the first match and clean the formatting
+                    correct_match = correct_match.iat[0]
+                    correct_match = ''.join(e for e in correct_match if e.isalnum() or search(r'\s', e))
+                    correct_match = sub(r'\s','_',correct_match)
+                    # replace old match with the correct one in IPPP
+                    self.ippp['service'][(self.ippp['port']== i['port']) & (preproc_df['protocol']== i['protocol'])] = correct_match
+
+                self.logfmc.info(self.utils.highlight_important_message(f'cleaned {len(fixing_holder)} dup service name items!'))
+                self.logfmc.info(f'mismatched items saved to {fname}')
+
             else:
-                self.ippp['port'].loc[i] = self.ippp['port_range_low'][i]
+                self.logfmc.critical(self.utils.highlight_important_message('Please Check IPPP for inconsistencies.. found multiple services matching to varying ports'))
+                self.logfmc.critical(f'mismatched items saved to {fname}')
+                quit()
+
+    @staticmethod
+    def fix_port_range_objects(fix_item) -> pd.DataFrame:
+        # drop trailing decimal point from str conversion
+        fix_item['port_range_low'] = fix_item['port_range_low'].astype(str).apply(lambda x: x.split('.')[0])
+        fix_item['port_range_high'] = fix_item['port_range_high'].astype(str).apply(lambda x: x.split('.')[0])
+        # take care range ports
+        fix_item['port'] = 0
+        for i in fix_item.index:
+            # catch any any clause
+            if fix_item['port_range_low'][i] in ['nan', '0', '65535', 'any'] and fix_item['port_range_high'][i] in ['nan', '0', '65535', 'any']:
+                fix_item['port_range_high'][i] = fix_item['port_range_low'][i] = 'any'
+            elif fix_item['port_range_high'][i] in ['nan', '0', '65535', 'any'] and fix_item['port_range_low'][i] in ['nan', '0', '65535', 'any']:
+                fix_item['port_range_high'][i] = fix_item['port_range_low'][i] = fix_item['port_range_high'][i] = 'any'
+            # if the rows has nothing in the adjacent col copy from the other row. (this avoids nan bug)
+            if fix_item['port_range_high'][i] in ['nan']:
+                fix_item['port_range_high'][i] = fix_item['port_range_low'][i]
+            elif fix_item['port_range_low'][i] in ['nan']:
+                fix_item['port_range_low'][i] = fix_item['port_range_high'][i]
+            # if port is a range append range symbol
+            if fix_item['port_range_low'][i] != fix_item['port_range_high'][i]:
+                fix_item['port'].loc[i] = fix_item['port_range_low'][i] + '-' + fix_item['port_range_high'][i]
+            else:
+                fix_item['port'].loc[i] = fix_item['port_range_low'][i]
         # take care of the random chars in protocol col ( we can only use TCP/UDP for its endpoint soo..
-        self.ippp['protocol'] = self.ippp['protocol'].astype(str).apply(lambda x: x.strip()[:3])
-        self.ippp.drop(columns=['port_range_low', 'port_range_high'], inplace=True)
+        fix_item['protocol'] = fix_item['protocol'].astype(str).apply(lambda x: x.strip()[:3])
+        fix_item.drop(columns=['port_range_low', 'port_range_high'], inplace=True)
+        return fix_item
 
     def create_fmc_object_names(self):
         for type_ in tqdm(['source', 'destination', 'port'], desc=f'creating new objects or checking if it exist.', total=3, colour='MAGENTA'):
@@ -322,19 +352,29 @@ class FireStick:
                     install_pd[f'fmc_name_{type_}'] = install_pd[f'fmc_name_{type_}'].apply(lambda port: port.replace(" ", "-"))
                     self.ippp[f'fmc_name_{type_}'] = self.ippp[f'fmc_name_{type_}'].apply(lambda port: port.replace(" ", "-"))
 
+                    # check if name already exist in object store
                     port_list = list(set([port for port in install_pd[f'fmc_name_{type_}'] if port not in port_data]))
+                    # if the names exist and we know this is unique then check again in service:protocol format
+                    for ipd_index in install_pd.index:
+                        port = f"{install_pd[f'fmc_name_{type_}'][ipd_index]}_{install_pd['protocol'][ipd_index]}"
+                        # change the fmc_name_port val
+                        install_pd[f'fmc_name_{type_}'][ipd_index] = port
+                        if port not in port_data:
+                            port_list.append(port)
+                    port_list = list(set(port_list))
+                    # create an create object list.
                     port_list = [{'name': port, "protocol": install_pd['protocol'][install_pd[f'fmc_name_{type_}'] == port].iloc[0], 'port': install_pd['port'][install_pd[f'fmc_name_{type_}'] == port].iloc[0]} for port in port_list]
                     try:
                         self.fmc.object.protocolportobject.create(data=port_list)
                     except Exception as error:
                         self.logfmc.debug(error)
 
-    def retrieve_hostname(self,ip):
+    def retrieve_hostname(self, ip):
         domain_check = self.config_data.get('dont_include_domains')
         try:
             retrieved = gethostbyaddr(ip)[0]
             if domain_check:
-                reg_match = search(f'({domain_check})$',retrieved)
+                reg_match = search(f'({domain_check})$', retrieved)
                 if bool(reg_match):
                     mat_pat = reg_match.group(0)
                     retrieved = retrieved.split(mat_pat)[0]
@@ -437,7 +477,7 @@ class FireStick:
             self.logfmc.debug(error)
             return None
 
-    def fdp_grouper(self,p, type_):
+    def fdp_grouper(self, p, type_):
         if type_ == 'ip':
             if not isinstance(p, list):
                 for ipx in self.net_data:
@@ -529,15 +569,15 @@ class FireStick:
             except:
                 # no dups to drop
                 pass
-            return ruleset,acp_id
+            return ruleset, acp_id
 
-        return ruleset,acp_id
+        return ruleset, acp_id
 
     def get_zone_from_ip(self, type_, i):
         # drop 0.0.0.0 so we dont get the outside zone matching due to it being a wildcard
         normalized_zone_ip_info = self.zone_ip_info.copy()
         normalized_zone_ip_info = normalized_zone_ip_info[normalized_zone_ip_info['IP'] != "0.0.0.0"]
-        normalized_zone_ip_info.reset_index(inplace=True,drop=True)
+        normalized_zone_ip_info.reset_index(inplace=True, drop=True)
 
         if self.ippp[type_][i] == 'any':
             return {f"{type_}_zone": 'any', f'{type_}_network': 'any'}
@@ -617,21 +657,21 @@ class FireStick:
             group = case4.get_group(gl)
             agg_src_net = []
             for i in group['source_network'].tolist():
-                if isinstance(i,(list,tuple)):
+                if isinstance(i, (list, tuple)):
                     for itr in i:
                         agg_src_net.append(itr)
                 else:
                     agg_src_net.append(i)
             agg_dst_net = []
             for i in group['destination_network'].tolist():
-                if isinstance(i,(list,tuple)):
+                if isinstance(i, (list, tuple)):
                     for itr in i:
                         agg_dst_net.append(itr)
                 else:
                     agg_dst_net.append(i)
             agg_port = []
             for i in group['port'].tolist():
-                if isinstance(i, (list,tuple)):
+                if isinstance(i, (list, tuple)):
                     for itr in i:
                         agg_port.append(itr)
                 else:
@@ -660,16 +700,16 @@ class FireStick:
             ruleset[col] = ruleset[col].apply(lambda x: list(v for v in x) if isinstance(x, tuple) else x)
 
         # since we grouped policy find the dups again and get rid of em
-        ruleset,_ = self.find_inter_dup_policies(ruleset)
+        ruleset, _ = self.find_inter_dup_policies(ruleset)
         if ruleset.empty:
             self.logfmc.warning('NO RULES TO DEPLOY')
             return
 
         # real cols are for function lookup use
         ruleset = ruleset.loc[:, ~ruleset.columns.str.startswith('real')]
-        return ruleset,acp_id
+        return ruleset, acp_id
 
-    def deploy_rules(self,new_rules,current_acp_rules_id):
+    def deploy_rules(self, new_rules, current_acp_rules_id):
         def _fix_object(x):
             try:
                 x = x[0]
@@ -776,7 +816,7 @@ class FireStick:
             rule_form = deepcopy(temp_form)
             rule_form['name'] = f"{self.rule_prepend_name}_{take_num}"
             take_num += 1
-            
+
             # strip net group to get only name for comparision
             striped_group_name = [i[0] for i in self.net_group_object]
             for srcdest_net in ['source', 'destination']:
@@ -786,11 +826,11 @@ class FireStick:
                         self.fmc_net_port_info()
                         rule_form[f'{srcdest_net}Networks'] = {'objects': _fix_object(self.fmc.object.networkgroup.get(name=rule[f'{srcdest_net}_network']))}
                     else:
-                        if not isinstance(rule[f'{srcdest_net}_network'],list):
+                        if not isinstance(rule[f'{srcdest_net}_network'], list):
                             net_list = [rule[f'{srcdest_net}_network']]
                         else:
                             net_list = rule[f'{srcdest_net}_network']
-                        rule_form[f'{srcdest_net}Networks'] = {'objects': [{'name': i[0], 'id': i[2], 'type': 'Host' if '/' not in i[1] else 'Network'} for ip in net_list for i in self.net_data  if i[0] == ip]}
+                        rule_form[f'{srcdest_net}Networks'] = {'objects': [{'name': i[0], 'id': i[2], 'type': 'Host' if '/' not in i[1] else 'Network'} for ip in net_list for i in self.net_data if i[0] == ip]}
 
             for srcdest_z in ['source', 'destination']:
                 if all(['any' != rule[f'{srcdest_z}_zone'], 'any' not in rule[f'{srcdest_z}_zone']]):
@@ -803,12 +843,12 @@ class FireStick:
                         rule_form[f'{srcdest_z}Zones'] = {'objects': [all_zones[rule[f'{srcdest_z}_zone']]]}
 
             if 'any' != rule['port']:
-                if '_PortGroup_' in rule['port'] or '_port_group_' in rule['port']: # support legacy
+                if '_PortGroup_' in rule['port'] or '_port_group_' in rule['port']:  # support legacy
                     # update npi if we created a grouped policy
                     self.fmc_net_port_info()
                     rule_form['destinationPorts'] = {'objects': _fix_object(self.fmc.object.portobjectgroup.get(name=rule['port']))}
                 else:
-                    if isinstance(rule['port'],str):
+                    if isinstance(rule['port'], str):
                         port = [rule['port']]
                     else:
                         port = rule['port']
@@ -821,12 +861,76 @@ class FireStick:
             res = self.fmc.policy.accesspolicy.accessrule.create(data=charity_policy, container_uuid=current_acp_rules_id, category='automation_engine', )
             self._creation_check(res, charity_policy)
             self.logfmc.warning(f'{"#" * 5}RULES PUSHED SUCCESSFULLY{"#" * 5}')
-            return True,1
+            return True, 1
         except Exception as error:
             self.logfmc.error(error)
-            return False,error
+            return False, error
 
-    def policy_deployment_flow(self,checkup=False):
+    def transform_acp(self, current_ruleset):
+        changed_ruleset = []
+        for i in current_ruleset:
+            subset_rule = {}
+            subset_rule['policy_name'] = i.get('name')
+            subset_rule['action'] = i.get('action')
+            subset_rule['src_z'] = self.find_nested_group_objects(i.get('sourceZones'))
+            subset_rule['dst_z'] = self.find_nested_group_objects(i.get('destinationZones'))
+            subset_rule['source'] = self.find_nested_group_objects(i.get('sourceNetworks'))
+            subset_rule['destination'] = self.find_nested_group_objects(i.get('destinationNetworks'))
+            subset_rule['port'] = self.find_nested_group_objects(i.get('destinationPorts'))
+            if 'strict_checkup' in self.config_data and self.config_data.get('strict_checkup'):
+                strict_holder = []
+                # changed to get since port can be NONE value AKA 'any' in the Rules
+
+                if i.get('destinationPorts') is not None:
+                    real_dst_ports = i.get('destinationPorts')
+                    for k in real_dst_ports.keys():
+                        if k == 'literals':
+                            for port_item in real_dst_ports[k]:
+                                if port_item.get('port') is not None:
+                                    if port_item.get('protocol') == '6':
+                                        real_port = f'TCP:{port_item.get("port")}'
+                                        strict_holder.append(real_port)
+                                    elif port_item.get('protocol') == '17':
+                                        real_port = f'UDP:{port_item.get("port")}'
+                                        strict_holder.append(real_port)
+                        elif k == 'objects':
+                            for obj_item in real_dst_ports[k]:
+                                if obj_item.get('type') == 'ProtocolPortObject':
+                                    for port_item in self.port_data:
+                                        if port_item[0] == obj_item['name']:
+                                            real_port = [f'{port_item[1]}:{port_item[2]}']
+                                            strict_holder.append(real_port)
+                                elif obj_item.get('type') == 'PortObjectGroup':
+                                    for port_item in self.port_group_object:
+                                        if port_item[0] == obj_item['name']:
+                                            # recurvsly look through the port objects for its names and get real port mapping from the port_data
+                                            for port_list_item in port_item[1]:
+                                                for port_item in self.port_data:
+                                                    if port_item[0] == port_list_item[0]:
+                                                        real_port = [f'{port_item[1]}:{port_item[2]}']
+                                                        strict_holder.append(real_port)
+                    if len(strict_holder) == 1:
+                        if not isinstance(next(iter(strict_holder)), list):
+                            subset_rule['real_port'] = strict_holder[0]
+                        else:
+                            subset_rule['real_port'] = [i for i in strict_holder[0]]
+                    else:
+                        save_list = []
+                        for i in strict_holder:
+                            if isinstance(i, list):
+                                for inner_i in i:
+                                    save_list.append(inner_i)
+                            else:
+                                save_list.append(i)
+                        subset_rule['real_port'] = save_list
+                else:
+                    subset_rule['real_port'] = None
+
+            changed_ruleset.append(subset_rule)
+        current_ruleset = changed_ruleset
+        return pd.DataFrame(current_ruleset)
+
+    def policy_deployment_flow(self, checkup=False):
         # login FMC
         self.rest_connection()
         # Get zone info first via ClI
@@ -836,10 +940,7 @@ class FireStick:
         # pull information from ippp
         ippp = pd.read_csv(self.ippp_location)
         self.ippp = self.retrieve_ippp(ippp)
-        self.fix_port_range_objects()
-        if not checkup:
-            # check ippp service values for uniqueness
-            self.find_dup_services()
+        self.ippp = self.fix_port_range_objects(self.ippp)
         # create FMC objects
         self.create_fmc_object_names()
         # restart conn
@@ -855,10 +956,10 @@ class FireStick:
                 ffc.compare_ippp_acp()
         else:
             # create FMC rules
-            ruleset,acp_set = self.create_acp_rule()
+            ruleset, acp_set = self.create_acp_rule()
             while True:
                 # deploy rules
-                successful,error_msg = self.deploy_rules(new_rules=ruleset, current_acp_rules_id=acp_set)
+                successful, error_msg = self.deploy_rules(new_rules=ruleset, current_acp_rules_id=acp_set)
                 if successful:
                     # test rule Checkup
                     ffc.compare_ippp_acp()
