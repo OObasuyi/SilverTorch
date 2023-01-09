@@ -31,7 +31,7 @@ class FireHands(FireBroom):
         # get rules that need to inserted/deleted
         ippp = pd.read_csv(self.ippp_location)
         self.ippp = self.retrieve_ippp(ippp)
-        self.fix_port_range_objects()
+        self.ippp = self.fix_port_range_objects(self.ippp)
         # standardize operation col in ippp
         self.ippp['comments'] = self.ippp['comments'].apply(lambda x: 1 if x == 'add' else 0)
         # create FMC objects if needed
