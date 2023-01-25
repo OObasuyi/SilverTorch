@@ -941,6 +941,8 @@ class FireStick:
         ippp = pd.read_csv(self.ippp_location)
         self.ippp = self.retrieve_ippp(ippp)
         self.ippp = self.fix_port_range_objects(self.ippp)
+        # check ippp service values for uniqueness
+        self.find_dup_services()
         # create FMC objects
         self.create_fmc_object_names()
         # restart conn
