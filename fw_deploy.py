@@ -244,10 +244,10 @@ class FireStick:
                         # if we cant find a match then manually just labeled what port:protocol is
                         if self.config_data.get('automatch_ports'):
                             self.ippp['service'][(self.ippp['port']== i['port']) & (preproc_df['protocol']== i['protocol'])] = missed_mapping.replace(':','_')
-
-                        self.logfmc.critical(self.utils.highlight_important_message(f'NO MAPPING FOR {missed_mapping}. PLEASE CREATING MAPPING AND RESTART ENGINE'))
-                        self.logfmc.critical(f'mismatched items saved to {fname}')
-                        quit()
+                        else:
+                            self.logfmc.critical(self.utils.highlight_important_message(f'NO MAPPING FOR {missed_mapping}. PLEASE CREATING MAPPING AND RESTART ENGINE'))
+                            self.logfmc.critical(f'mismatched items saved to {fname}')
+                            quit()
 
                     # take the first match and clean the formatting
                     correct_match = correct_match.iat[0]
