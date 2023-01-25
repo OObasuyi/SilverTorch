@@ -1,0 +1,92 @@
+#### CONFIG FILE FOR SilverTorch V0.2 ####
+
+firewall_type: firepower
+# can be set to None if the device IS NOT MANAGED from a central controller
+management_center: 10.11.6.60
+# the firewall to make routing and interface reference from FOR now a sample of ONE is supported.
+firewall_sensor: 10.11.6.191
+# if there is not a routing entry for a specific IP in the IPPP then use this zone to set its zone in the ruleset.
+zone_of_last_resort: outside_zone
+
+
+#/ firepower suite #
+access_policy: test_acp
+domain: Global
+#/ firepower suite #
+
+
+#/ RULE INGESTION OR CORRECTION
+ippp_location: gfrs.csv
+# MAPPING: if there's inconsistency with the IPPP such as the same name to a given port change it to the correct name.
+# preprocess csv must be created and placed in the main dir, it will be moved and can be used later
+preprocess_csv: correction_list.csv
+automatch_ports: True
+#/ RULE INGESTION OR CORRECTION
+
+
+#/ RULE MANAGEMENT
+stage_ippp: true
+# check to see if IPPP exist in the firewalls ruleset
+ippp_checkup: false
+# when pushing a config this will be prepended to the new rules,
+# in addition if other functions such as cleanup or checkup is used it will find rules in the ruleset with this specific
+# name in the rule name BUT *BE AS CONCISE AS POSSIBLE.*
+rule_prepend_name: VOIP_RULES
+#/ RULE MANAGEMENT
+
+
+#/ CLEAN UP SECTION
+cleanup: true
+# if there are rules that you want to collapse/reorganize for firewall scaffolding.
+rule_cleanup: true
+# if you want change the name of host objects to there DNS or IP attributes.
+object_cleanup: true
+# if you want to remove ZERO hit policies from ruleset. IF TRUE SPECIFY THE LOCATION OF THE RULES THAT NEED TO BE CLEANED
+delete_unused_rules: false
+# change the name of the network objects
+# resolve: whether you want IP or DNS as the new name value for indiuduval objects
+# group: change the whole name of the grouped objects defined by @rule_prepend_name
+# DEFAULT: will change convert legacy net_group to NetGroup format
+clean_type: group
+group_clean_name: false
+# if you want to delete ununsed objects in the firewall in conjuction of a cleanup
+remove_unused: false
+# emergency switch in case something happened(network/power drop) in rule cleanup module since it involved rearranges the firewall configs.
+# this switch will reinstall the ACP ruleset that were modified.
+# recover old ACP file if the program crashed
+recovery_mode: false
+#/ CLEAN UP SECTION
+
+
+#/ GENERAL INFORMATION FROM FIREWALLS
+# this will save all or specific rules from the firewall or management device
+save_rules: False
+# if you need to save specific rules it will use the "rule_prepend_name" mentioned above
+save_specific_rules: False
+# convert rules in a readable format
+pretty_rules: true
+# only get rules based on IP with this regex mapping
+specific_src_dst: '192.168.*|10\..*|218.17.85.*'
+#/ GENERAL INFORMATION FROM FIREWALLS
+
+
+#/ MODIFY EXISTING RULES
+mod_rules: false
+#/ MODIFY EXISTING RULES
+
+
+#/ OBJECT GENERATION AND IDENTIFICATION
+# if you want to use the ACTUAL PROTOCOL:PORT pair instead of the port defined name you can enable strict checking
+strict_checkup: true
+# if you want objects in the firewall to have DNS resolved local hostnames instead of IPs as the object name, enable this
+# you can also filter on what domain you just want the hostname for in dont_include_domains
+resolve_objects: false
+# This will by REGEX
+dont_include_domains: '.com|.org'
+#/ OBJECT GENERATION AND IDENTIFICATION
+
+
+
+
+
+

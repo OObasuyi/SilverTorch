@@ -241,6 +241,10 @@ class FireStick:
                     # if we dont have a mapping then we cant continue since we would not know how to create this object in the manager
                     if correct_match.empty:
                         missed_mapping = f"{i['port']}:{i['protocol']}"
+                        # if we cant find a match then manually just labeled what port:protocol is
+                        if self.config_data.get('automatch_ports'):
+                            self.ippp['service'][(self.ippp['port']== i['port']) & (preproc_df['protocol']== i['protocol'])] = missed_mapping.replace(':','_')
+
                         self.logfmc.critical(self.utils.highlight_important_message(f'NO MAPPING FOR {missed_mapping}. PLEASE CREATING MAPPING AND RESTART ENGINE'))
                         self.logfmc.critical(f'mismatched items saved to {fname}')
                         quit()
@@ -941,7 +945,6 @@ class FireStick:
         ippp = pd.read_csv(self.ippp_location)
         self.ippp = self.retrieve_ippp(ippp)
         self.ippp = self.fix_port_range_objects(self.ippp)
-        # check ippp service values for uniqueness
         self.find_dup_services()
         # create FMC objects
         self.create_fmc_object_names()
