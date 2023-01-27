@@ -20,7 +20,6 @@ ippp_location: gfrs.csv
 # MAPPING: if there's inconsistency with the IPPP such as the same name to a given port change it to the correct name.
 # preprocess csv must be created and placed in the main dir, it will be moved and can be used later
 preprocess_csv: correction_list.csv
-automatch_ports: True
 #/ RULE INGESTION OR CORRECTION
 
 

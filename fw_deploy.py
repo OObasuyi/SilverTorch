@@ -164,24 +164,24 @@ class FireStick:
             proposed_rules.fillna(value='any', inplace=True)
             return proposed_rules, current_ruleset, acp_id
 
-    @staticmethod
-    def _ip_address_check(x):
-        # check if user entered a hot bits in thier subnet mask
+    def _ip_address_check(self,x):
+        # check if user entered a hot bits in their subnet mask
         x = x.strip()
         try:
-            if not 'any' in x:
-                # has to strict check so we can properly identifty if its a subnet or mistyped single IP.
+            if 'any' not in x:
+                # has to strict check so we can properly identify if its a subnet or mistyped single IP.
                 return str(ip_network(x))
             else:
                 return x
-        except:
+        except ValueError as verror:
+            self.logfmc.debug(verror)
             return x.split('/')[0]
 
     def retrieve_ippp(self, ippp):
         ippp = ippp.astype(str)
         ippp = ippp[ippp['source'] != 'nan']
         for origin in ['source', 'destination']:
-            # check if user entered a hot bits in thier subnet mask
+            # check if user entered a hot bits in their subnet mask
             ippp[origin] = ippp[origin].apply(lambda x: str(self._ip_address_check(x)))
             # fix so we dont have to refactor a bullion lines
             ippp[origin] = ippp[origin].apply(lambda x: (x.split('/')[0]).strip() if '/32' in x else x.strip())
@@ -219,9 +219,9 @@ class FireStick:
         for gl in sg_listing:
             group = service_grouping.get_group(gl)
             # check if we have inconsistent port-to-service matching
-            have_dup = group[['service', 'port','protocol']].drop_duplicates()
+            have_dup = group[['service', 'port', 'protocol']].drop_duplicates()
             if have_dup.shape[0] >= 2:
-                fixing_holder.append(have_dup.to_dict(orient = 'records'))
+                fixing_holder.append(have_dup.to_dict(orient='records'))
         if len(fixing_holder) > 0:
             # un-nest list
             fixing_holder = [l2 for l1 in fixing_holder for l2 in l1]
@@ -236,12 +236,12 @@ class FireStick:
                 preproc_df = self.fix_port_range_objects(preproc_df)
                 # merge existing port data info with the preproc incase a matching is found in there that is correct
                 fw_port_data = pd.DataFrame([{'protocol': pdata[1], 'service': pdata[0], 'port': pdata[2]} for pdata in self.port_data])
-                preproc_df = pd.concat([preproc_df,fw_port_data],ignore_index=True,sort=False)
+                preproc_df = pd.concat([preproc_df, fw_port_data], ignore_index=True, sort=False)
 
                 # get all the port mismatch findings from the holder
                 ans = self.utils.permission_check(
                     self.utils.highlight_important_message(f'you have {len(fixing_holder)} duplicate matches in this IPPP do you want to create an mapping in the object store for ALL objects? y/N'),
-                    ['y','n']
+                    ['y', 'n']
                 )
                 if ans == 'n':
                     self.logfmc.critical(f'mismatched items saved to {fname}')
@@ -249,7 +249,7 @@ class FireStick:
                     quit()
                 else:
                     for i in fixing_holder:
-                        correct_match = preproc_df['service'][(preproc_df['port']== i['port']) & (preproc_df['protocol']== i['protocol'])]
+                        correct_match = preproc_df['service'][(preproc_df['port'] == i['port']) & (preproc_df['protocol'] == i['protocol'])]
                         # if we dont have a mapping then we cant continue since we would not know how to create this object in the manager
                         if correct_match.empty:
                             missed_mapping = f"{i['port']}_{i['protocol']}"
@@ -260,9 +260,9 @@ class FireStick:
                         # take the first match and clean the formatting
                         correct_match = correct_match.iat[0]
                         correct_match = ''.join(e for e in correct_match if e.isalnum() or search(r'\s', e))
-                        correct_match = sub(r'\s','_',correct_match)
+                        correct_match = sub(r'\s', '_', correct_match)
                         # replace old match with the correct one in IPPP
-                        self.ippp['service'][(self.ippp['port']== i['port']) & (preproc_df['protocol']== i['protocol'])] = correct_match
+                        self.ippp['service'][(self.ippp['port'] == i['port']) & (preproc_df['protocol'] == i['protocol'])] = correct_match
 
                 self.logfmc.info(self.utils.highlight_important_message(f'cleaned {len(fixing_holder)} dup service name items!'))
                 self.logfmc.info(f'mismatched items saved to {fname}')
@@ -363,23 +363,6 @@ class FireStick:
                     port_data = [po[0] for po in self.port_data]
                     install_pd[f'fmc_name_{type_}'] = install_pd[f'fmc_name_{type_}'].apply(lambda port: port.replace(" ", "-"))
                     self.ippp[f'fmc_name_{type_}'] = self.ippp[f'fmc_name_{type_}'].apply(lambda port: port.replace(" ", "-"))
-
-                    # # check if name already exist in object store
-                    # port_list = list(set([port for port in install_pd[f'fmc_name_{type_}'] if port not in port_data]))
-                    # # if the names exist and we know this is unique then check again in service:protocol format
-                    # for ipd_index in install_pd.index:
-                    #     port = f"{install_pd[f'fmc_name_{type_}'][ipd_index]}_{install_pd['protocol'][ipd_index]}"
-                    #     # change the fmc_name_port val
-                    #     install_pd[f'fmc_name_{type_}'][ipd_index] = port
-                    #     if port not in port_data:
-                    #         port_list.append(port)
-                    # port_list = list(set(port_list))
-                    # # create an create object list.
-                    # port_list = [{'name': port, "protocol": install_pd['protocol'][install_pd[f'fmc_name_{type_}'] == port].iloc[0], 'port': install_pd['port'][install_pd[f'fmc_name_{type_}'] == port].iloc[0]} for port in port_list]
-                    # try:
-                    #     self.fmc.object.protocolportobject.create(data=port_list)
-                    # except Exception as error:
-                    #     self.logfmc.debug(error)
 
                     port_list = list(
                         set(
@@ -661,9 +644,10 @@ class FireStick:
             ruleset.append(rule_flow)
 
         ruleset = pd.DataFrame(ruleset)
-        # if there all the same zone then we got nothing to find dups of
+        # if their all the same zone then we got nothing to find dups of
         if ruleset.empty:
-            raise Exception('NOTHING IN RULESET THEY MIGHT ALL BE THE SAME ZONE')
+            self.logfmc.critical(self.utils.highlight_important_message('NOTHING IN RULESET THEY MIGHT ALL BE THE SAME ZONE'))
+            quit()
         return ruleset
 
     def create_acp_rule(self):
@@ -672,14 +656,12 @@ class FireStick:
         ruleset, acp_id = self.find_inter_dup_policies(ruleset)
 
         # if we removed all the dups and we have no new rules or for some reason we dont have rules to deploy raise to stop the program
-        try:
-            for col in ruleset.columns:
-                ruleset[col] = ruleset[col].apply(lambda x: tuple(v for v in x) if isinstance(x, list) else x)
-            ruleset.drop_duplicates(ignore_index=True, inplace=True)
-            if ruleset.empty:
-                raise Exception('NO RULES TO DEPLOY')
-        except Exception as error:
-            raise Exception(error)
+        for col in ruleset.columns:
+            ruleset[col] = ruleset[col].apply(lambda x: tuple(v for v in x) if isinstance(x, list) else x)
+        ruleset.drop_duplicates(ignore_index=True, inplace=True)
+        if ruleset.empty:
+            self.logfmc.critical(self.utils.highlight_important_message('NO RULES TO DEPLOY'))
+            quit()
 
         # agg by zone
         ruleset_holder = []
@@ -979,15 +961,23 @@ class FireStick:
         # restart conn
         self.rest_connection(reset=True)
         ffc = FireCheck(self)
-        if checkup:
-            if self.config_data.get('strict_checkup'):
-                literal_ippp = self.ippp.copy()
-                literal_ippp['port'] = literal_ippp['protocol'] + ':' + literal_ippp['port']
-                self.ippp = literal_ippp
-                ffc.compare_ippp_acp(strict_checkup=True)
-            else:
-                ffc.compare_ippp_acp()
+        # rule check strictness
+        mod_ippp = None
+        if self.config_data.get('strict_checkup'):
+            mod_ippp = ffc.should_strict_check()
+            strict_check = True
         else:
+            strict_check = False
+        ffc.ippp = mod_ippp if strict_check else self.ippp
+        # JUST checkup
+        if checkup:
+            ffc.compare_ippp_acp(strict_checkup=strict_check)
+        else:
+            # check if rules are in the FW prior to deployment since our this is stricter on the IPPP
+            rules_already_installed = ffc.compare_ippp_acp(strict_checkup=strict_check)
+            if rules_already_installed:
+                self.logfmc.critical(self.utils.highlight_important_message('NO RULES TO DEPLOY'))
+                quit()
             # create FMC rules
             ruleset, acp_set = self.create_acp_rule()
             while True:
@@ -995,7 +985,7 @@ class FireStick:
                 successful, error_msg = self.deploy_rules(new_rules=ruleset, current_acp_rules_id=acp_set)
                 if successful:
                     # test rule Checkup
-                    ffc.compare_ippp_acp()
+                    ffc.compare_ippp_acp(strict_checkup=strict_check)
                     break
                 elif 'Please enter with another name' in str(error_msg):
                     new_rule_name = input('please enter a new rule name to use in the ruleset')
