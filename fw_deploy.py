@@ -221,7 +221,7 @@ class FireStick:
             # check if we have inconsistent port-to-service matching
             have_dup = group[['service', 'port','protocol']].drop_duplicates()
             if have_dup.shape[0] >= 2:
-                fixing_holder.append(have_dup.to_dict('r'))
+                fixing_holder.append(have_dup.to_dict(orient = 'records'))
         if len(fixing_holder) > 0:
             # un-nest list
             fixing_holder = [l2 for l1 in fixing_holder for l2 in l1]
@@ -234,28 +234,35 @@ class FireStick:
                 preproc_fname = self.utils.create_file_path('preproc', self.config_data.get('preprocess_csv'))
                 preproc_df = pd.read_csv(preproc_fname)
                 preproc_df = self.fix_port_range_objects(preproc_df)
+                # merge existing port data info with the preproc incase a matching is found in there that is correct
+                fw_port_data = pd.DataFrame([{'protocol': pdata[1], 'service': pdata[0], 'port': pdata[2]} for pdata in self.port_data])
+                preproc_df = pd.concat([preproc_df,fw_port_data],ignore_index=True,sort=False)
 
                 # get all the port mismatch findings from the holder
-                for i in fixing_holder:
-                    correct_match = preproc_df['service'][(preproc_df['port']== i['port']) & (preproc_df['protocol']== i['protocol'])]
-                    # if we dont have a mapping then we cant continue since we would not know how to create this object in the manager
-                    if correct_match.empty:
-                        missed_mapping = f"{i['port']}:{i['protocol']}"
-                        # if we cant find a match then manually just labeled what port:protocol is
-                        if self.config_data.get('automatch_ports'):
-                            self.ippp['service'][(self.ippp['port']== i['port']) & (preproc_df['protocol']== i['protocol'])] = missed_mapping.replace(':','_')
+                ans = self.utils.permission_check(
+                    self.utils.highlight_important_message(f'you have {len(fixing_holder)} duplicate matches in this IPPP do you want to create an mapping in the object store for ALL objects? y/N'),
+                    ['y','n']
+                )
+                if ans == 'n':
+                    self.logfmc.critical(f'mismatched items saved to {fname}')
+                    self.logfmc.critical(self.utils.highlight_important_message('PLEASE CREATING MAPPING AND RESTART ENGINE'))
+                    quit()
+                else:
+                    for i in fixing_holder:
+                        correct_match = preproc_df['service'][(preproc_df['port']== i['port']) & (preproc_df['protocol']== i['protocol'])]
+                        # if we dont have a mapping then we cant continue since we would not know how to create this object in the manager
+                        if correct_match.empty:
+                            missed_mapping = f"{i['port']}_{i['protocol']}"
+                            self.logfmc.warning(f'CREATING MAPPING FOR {missed_mapping}')
+                            self.ippp['service'][(self.ippp['port'] == i['port']) & (preproc_df['protocol'] == i['protocol'])] = missed_mapping
                             continue
-                        else:
-                            self.logfmc.critical(self.utils.highlight_important_message(f'NO MAPPING FOR {missed_mapping}. PLEASE CREATING MAPPING AND RESTART ENGINE'))
-                            self.logfmc.critical(f'mismatched items saved to {fname}')
-                            quit()
 
-                    # take the first match and clean the formatting
-                    correct_match = correct_match.iat[0]
-                    correct_match = ''.join(e for e in correct_match if e.isalnum() or search(r'\s', e))
-                    correct_match = sub(r'\s','_',correct_match)
-                    # replace old match with the correct one in IPPP
-                    self.ippp['service'][(self.ippp['port']== i['port']) & (preproc_df['protocol']== i['protocol'])] = correct_match
+                        # take the first match and clean the formatting
+                        correct_match = correct_match.iat[0]
+                        correct_match = ''.join(e for e in correct_match if e.isalnum() or search(r'\s', e))
+                        correct_match = sub(r'\s','_',correct_match)
+                        # replace old match with the correct one in IPPP
+                        self.ippp['service'][(self.ippp['port']== i['port']) & (preproc_df['protocol']== i['protocol'])] = correct_match
 
                 self.logfmc.info(self.utils.highlight_important_message(f'cleaned {len(fixing_holder)} dup service name items!'))
                 self.logfmc.info(f'mismatched items saved to {fname}')
@@ -357,18 +364,38 @@ class FireStick:
                     install_pd[f'fmc_name_{type_}'] = install_pd[f'fmc_name_{type_}'].apply(lambda port: port.replace(" ", "-"))
                     self.ippp[f'fmc_name_{type_}'] = self.ippp[f'fmc_name_{type_}'].apply(lambda port: port.replace(" ", "-"))
 
-                    # check if name already exist in object store
-                    port_list = list(set([port for port in install_pd[f'fmc_name_{type_}'] if port not in port_data]))
-                    # if the names exist and we know this is unique then check again in service:protocol format
-                    for ipd_index in install_pd.index:
-                        port = f"{install_pd[f'fmc_name_{type_}'][ipd_index]}_{install_pd['protocol'][ipd_index]}"
-                        # change the fmc_name_port val
-                        install_pd[f'fmc_name_{type_}'][ipd_index] = port
-                        if port not in port_data:
-                            port_list.append(port)
-                    port_list = list(set(port_list))
-                    # create an create object list.
-                    port_list = [{'name': port, "protocol": install_pd['protocol'][install_pd[f'fmc_name_{type_}'] == port].iloc[0], 'port': install_pd['port'][install_pd[f'fmc_name_{type_}'] == port].iloc[0]} for port in port_list]
+                    # # check if name already exist in object store
+                    # port_list = list(set([port for port in install_pd[f'fmc_name_{type_}'] if port not in port_data]))
+                    # # if the names exist and we know this is unique then check again in service:protocol format
+                    # for ipd_index in install_pd.index:
+                    #     port = f"{install_pd[f'fmc_name_{type_}'][ipd_index]}_{install_pd['protocol'][ipd_index]}"
+                    #     # change the fmc_name_port val
+                    #     install_pd[f'fmc_name_{type_}'][ipd_index] = port
+                    #     if port not in port_data:
+                    #         port_list.append(port)
+                    # port_list = list(set(port_list))
+                    # # create an create object list.
+                    # port_list = [{'name': port, "protocol": install_pd['protocol'][install_pd[f'fmc_name_{type_}'] == port].iloc[0], 'port': install_pd['port'][install_pd[f'fmc_name_{type_}'] == port].iloc[0]} for port in port_list]
+                    # try:
+                    #     self.fmc.object.protocolportobject.create(data=port_list)
+                    # except Exception as error:
+                    #     self.logfmc.debug(error)
+
+                    port_list = list(
+                        set(
+                            [
+                                port
+                                for port in install_pd[f'fmc_name_{type_}']
+                                if port not in port_data
+                            ]))
+                    port_list = [
+                        {
+                            'name': port,
+                            "protocol": install_pd['protocol'][install_pd[f'fmc_name_{type_}'] == port].iloc[0],
+                            'port': install_pd['port'][install_pd[f'fmc_name_{type_}'] == port].iloc[0]
+                        }
+                        for port in port_list
+                    ]
                     try:
                         self.fmc.object.protocolportobject.create(data=port_list)
                     except Exception as error:

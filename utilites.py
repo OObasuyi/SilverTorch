@@ -89,17 +89,24 @@ class Util:
             return _internal_pull_creds_02(cdict)
 
     @staticmethod
-    def permission_check(deploy_msg: str):
+    def permission_check(deploy_msg: str, expected_answers=None, ):
         logc = log_collector()
+
+        if expected_answers is None:
+            expected_answers = ['c']
+        expected_answers = [ea.lower() for ea in expected_answers]
+
         if not isinstance(deploy_msg, str):
             raise ValueError(f'deploy_msg value is not type str. you passed an {type(deploy_msg)} object')
 
-        warn_msg = f'{deploy_msg}.\nENTER c TO CONTINUE'
+        split_ans = ' OR '.join(expected_answers) if len(expected_answers) > 1 else expected_answers[0]
+        warn_msg = f'{deploy_msg}.\nENTER {split_ans} TO CONTINUE'
         while True:
             logc.warning(warn_msg)
             user_input = input()
-            if user_input.lower() == 'c':
-                break
+            user_input = user_input.lower()
+            if user_input in expected_answers:
+                return user_input
 
     @staticmethod
     def rename_ippp_instances(f_name: str, replace_with_list: list, to_look_for: str, col_to_process_list: list, return_pd=False):
