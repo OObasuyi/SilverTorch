@@ -164,7 +164,7 @@ class FireStick:
             proposed_rules.fillna(value='any', inplace=True)
             return proposed_rules, current_ruleset, acp_id
 
-    def _ip_address_check(self,x):
+    def ip_address_check(self,x):
         # check if user entered a hot bits in their subnet mask
         x = x.strip()
         try:
@@ -182,7 +182,7 @@ class FireStick:
         ippp = ippp[ippp['source'] != 'nan']
         for origin in ['source', 'destination']:
             # check if user entered a hot bits in their subnet mask
-            ippp[origin] = ippp[origin].apply(lambda x: str(self._ip_address_check(x)))
+            ippp[origin] = ippp[origin].apply(lambda x: str(self.ip_address_check(x)))
             # fix so we dont have to refactor a bullion lines
             ippp[origin] = ippp[origin].apply(lambda x: (x.split('/')[0]).strip() if '/32' in x else x.strip())
         # strip extra spaces in cols

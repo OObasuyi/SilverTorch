@@ -64,8 +64,11 @@ save_rules: False
 save_specific_rules: False
 # convert rules in a readable format
 pretty_rules: true
-# only get rules based on IP with this regex mapping
-specific_src_dst: '192.168.*|10\..*|218.17.85.*'
+# only get rules based on IP or subnet
+specific_src_dst:
+  - 192.168.0/24
+  - 10.0.0.0/8
+  - 218.17.85.0/24
 #/ GENERAL INFORMATION FROM FIREWALLS
 
 

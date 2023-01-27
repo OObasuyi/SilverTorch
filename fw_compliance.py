@@ -1,3 +1,4 @@
+from ipaddress import ip_network
 from multiprocessing import Pool, cpu_count
 
 from fw_deploy import FireStick
@@ -14,6 +15,8 @@ class FireComply(FireStick):
         self.rest_connection()
         self.comply_dir = 'compliance_rules'
         self.dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d_%H%M")
+        # placeholder if we need specific IPs
+        self.specific_ips = None
 
     def export_current_policy(self):
         self.logfmc.warning('Trying to Export rule(s) from Firewall')
@@ -36,8 +39,9 @@ class FireComply(FireStick):
 
             # internal func to collect subset_df
             def rule_gatherer_callback(data):
-                parsed_ruleset.append(data)
-                return parsed_ruleset
+                if not data.empty:
+                    parsed_ruleset.append(data)
+                    return parsed_ruleset
 
             def log_func_error(error):
                 self.logfmc.error(error)
@@ -65,6 +69,7 @@ class FireComply(FireStick):
 
     def rule_spool(self, idx, current_ruleset):
         self.logfmc.debug(f'spawning new process for rule_spool on {getpid()}')
+
         rule_loc = current_ruleset.iloc[idx]
         collasped_rule = [rule_loc.to_dict()]
         # useed to stop loop this is amount of columns to make pass on to make sure we unravel them all
@@ -98,9 +103,12 @@ class FireComply(FireStick):
 
         # if we need rules just for specific IPs
         specific_ips = self.config_data.get('specific_src_dst')
+
         if specific_ips:
-            src_spec = subset_df[subset_df['real_source'].apply(lambda x: bool(search(specific_ips, x))) & subset_df['real_destination'].apply(lambda x: not bool(search(specific_ips, x)))]
-            dst_spec = subset_df[subset_df['real_destination'].apply(lambda x: bool(search(specific_ips, x))) & subset_df['real_source'].apply(lambda x: not bool(search(specific_ips, x)))]
+            # check if IPs dont have host bit set
+            self.specific_ips = [ip_network(sips) for sips in specific_ips if self.ip_address_check(sips)]
+            src_spec = subset_df[subset_df['real_source'].apply(lambda x: self.find_specific_ip_needed(x)) & subset_df['real_destination'].apply(lambda x: not self.find_specific_ip_needed(x))]
+            dst_spec = subset_df[subset_df['real_destination'].apply(lambda x: self.find_specific_ip_needed(x)) & subset_df['real_source'].apply(lambda x: not self.find_specific_ip_needed(x))]
             subset_df = pd.concat([src_spec, dst_spec], ignore_index=True)
             subset_df.dropna(inplace=True)
 
@@ -118,3 +126,17 @@ class FireComply(FireStick):
         subset_df.drop(columns=['real_port'], inplace=True)
         subset_df.rename(columns={'real_source': 'source', 'real_destination': 'destination'}, inplace=True)
         return subset_df
+
+    def find_specific_ip_needed(self,x):
+        # catch any
+        try:
+            x = ip_network(x)
+        except ValueError as verror:
+            self.logfmc.debug(verror)
+            return False
+
+        for sub_ip in self.specific_ips:
+            if x.subnet_of(sub_ip):
+                return True
+
+        return False
