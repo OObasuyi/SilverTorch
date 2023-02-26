@@ -4,7 +4,6 @@ from multiprocessing import Pool, cpu_count
 from fw_deploy import FireStick
 from datetime import datetime
 import pandas as pd
-from re import search
 from os import getpid
 
 

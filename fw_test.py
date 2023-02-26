@@ -33,7 +33,7 @@ class FireCheck:
             dst_flow = self.fire_class.get_zone_from_ip('destination', i)
             # block double zone
             if src_flow["source_zone"] == dst_flow["destination_zone"]:
-                same_zone_counter += 0
+                same_zone_counter += 1
                 continue
             rule_flow.update(src_flow)
             rule_flow.update(dst_flow)
