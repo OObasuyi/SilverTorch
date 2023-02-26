@@ -609,11 +609,10 @@ class FireStick:
                     return {f"{type_}_zone": normalized_zone_ip_info['ZONE'][p], f'{type_}_network': self.ippp[f'fmc_name_{type_}'][i]}
         # if we need to find all zones a subnet might reside
         elif '/' in self.ippp[type_][i]:
-            zone_group = tuple(list(set([normalized_zone_ip_info['ZONE'][p] for p in normalized_zone_ip_info.index if ippp_subnet.subnet_of(ip_network(normalized_zone_ip_info['ip_cidr'][p]))])))
+            zone_group = list(set([normalized_zone_ip_info['ZONE'][p] for p in normalized_zone_ip_info.index if ippp_subnet.subnet_of(ip_network(normalized_zone_ip_info['ip_cidr'][p]))]))
             # if we have a 1.1.0.0/16 and we dont have the summarized route in our routing table we need to find all subnets of this subnets zone also!
-            if self.ippp[type_][i] not in normalized_zone_ip_info['ip_cidr'].tolist():
-                find_all_subnets_group = tuple(list(set([normalized_zone_ip_info['ZONE'][p] for p in normalized_zone_ip_info.index if ip_network(normalized_zone_ip_info['ip_cidr'][p]).subnet_of(ippp_subnet)])))
-                zone_group = zone_group + find_all_subnets_group
+            find_all_subnets_group = list(set([normalized_zone_ip_info['ZONE'][p] for p in normalized_zone_ip_info.index if ip_network(normalized_zone_ip_info['ip_cidr'][p]).subnet_of(ippp_subnet)]))
+            zone_group = tuple(list(set(zone_group + find_all_subnets_group)))
 
             if len(zone_group) != 0:
                 zone_group = zone_group if len(zone_group) > 1 else zone_group[0]
