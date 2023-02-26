@@ -612,7 +612,7 @@ class FireStick:
             zone_group = tuple(list(set([normalized_zone_ip_info['ZONE'][p] for p in normalized_zone_ip_info.index if ippp_subnet.subnet_of(ip_network(normalized_zone_ip_info['ip_cidr'][p]))])))
             # if we have a 1.1.0.0/16 and we dont have the summarized route in our routing table we need to find all subnets of this subnets zone also!
             if self.ippp[type_][i] not in normalized_zone_ip_info['ip_cidr'].tolist():
-                find_all_subnets_group = tuple(list(set([normalized_zone_ip_info['ZONE'][p] for p in normalized_zone_ip_info.index if ip_network(normalized_zone_ip_info['ip_cidr'][p].subnet_of(ippp_subnet))])))
+                find_all_subnets_group = tuple(list(set([normalized_zone_ip_info['ZONE'][p] for p in normalized_zone_ip_info.index if ip_network(normalized_zone_ip_info['ip_cidr'][p]).subnet_of(ippp_subnet)])))
                 zone_group = zone_group + find_all_subnets_group
 
             if len(zone_group) != 0:
