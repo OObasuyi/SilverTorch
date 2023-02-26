@@ -40,11 +40,13 @@ class FireCheck:
             d_check = dst_flow["destination_zone"] if not isinstance(dst_flow["destination_zone"],str) else tuple([dst_flow["destination_zone"]])
             least_zones = min([s_check,d_check], key=len)
             most_zones = max([s_check,d_check], key=len)
-            removed_dup_zone = tuple([z for z in most_zones if z not in least_zones])
-            if least_zones == s_check:
-                dst_flow["destination_zone"] = removed_dup_zone
-            elif least_zones == d_check:
-                src_flow["source_zone"] = removed_dup_zone
+            # only remove if we have an uneven amount
+            if len(least_zones) != len(most_zones):
+                removed_dup_zone = tuple([z for z in most_zones if z not in least_zones])
+                if least_zones == s_check:
+                    dst_flow["destination_zone"] = removed_dup_zone
+                elif least_zones == d_check:
+                    src_flow["source_zone"] = removed_dup_zone
 
             rule_flow.update(src_flow)
             rule_flow.update(dst_flow)
