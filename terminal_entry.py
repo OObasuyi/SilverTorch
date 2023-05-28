@@ -57,7 +57,7 @@ def terminal_entry():
     # save connection events
     if config_file.get('conn_events'):
         fm = FireComply(cred_file=args.cred_file, configuration_data=config_file,generate_conn=False)
-        fm.transform_connection_events()
+        fm.generate_rules_from_events()
         return
 
     # modify existing rules

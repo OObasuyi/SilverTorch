@@ -149,7 +149,7 @@ class FireComply(FireStick):
 
         return False
 
-    def transform_connection_events(self):
+    def transform_connection_events(self) -> pd.DataFrame:
         self.logfmc.warning('Trying to Transform events from Firewall to csv')
         output_dir = 'analysis'
         output_file = 'connection_events'
@@ -171,7 +171,34 @@ class FireComply(FireStick):
         return conn_events
 
     def generate_rules_from_events(self):
-        # TODO: parse into IPPP format and send to rule deploy engine for processing while skipping if rule exist segment
-        pass
+        # pull data into SilverTorch
+        conn_events = self.transform_connection_events()
+
+        # make sure IPPP format is in df if not pull them from YAML
+        if self.utils.standard_ippp_cols not in conn_events.columns.tolist():
+            # reverse dict k,v to a usable format
+            trans_lib = {value: key for key, value in self.config_data.get('event_transform_lib').items()}
+            conn_events.rename(columns=trans_lib,inplace=True)
+        # drop useless cols
+        conn_events['comments'] = self.config_data.get('rule_comment')
+        conn_events = conn_events[self.utils.standard_ippp_cols]
+
+        # since these are con events src ports will more than likely be ephemeral
+        conn_events['port_range_low'] = conn_events['port_range_high']
+
+        for c in self.utils.standard_ippp_cols:
+            # strip anything not a number in ports
+            if 'port' in c:
+                conn_events[c] = conn_events[c].apply(lambda x: ''.join(filter(str.isdigit, x)))
+            # if dont have a value for service insert generic service name
+            elif 'service' in c:
+                conn_events[c] = conn_events[c].astype(str).apply(lambda x: 'generic_service' if x == 'nan' else x )
+
+        self.ippp = conn_events
+        # create a new rule name for events
+        self.create_new_rule_name()
+        # push rules
+        self.policy_deployment_flow()
+
 
 

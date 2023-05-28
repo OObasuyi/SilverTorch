@@ -177,7 +177,7 @@ class FireStick:
             self.logfmc.debug(verror)
             return x.split('/')[0]
 
-    def retrieve_ippp(self, ippp):
+    def prepare_ippp(self, ippp):
         ippp = ippp.astype(str)
         ippp = ippp[ippp['source'] != 'nan']
         for origin in ['source', 'destination']:
@@ -948,6 +948,11 @@ class FireStick:
         current_ruleset = changed_ruleset
         return pd.DataFrame(current_ruleset)
 
+    def create_new_rule_name(self):
+        new_rule_name = input('please enter a new rule name to use in the ruleset')
+        self.utils.permission_check(f'are you sure you want to continue with {new_rule_name} as the rule name?')
+        self.rule_prepend_name = new_rule_name
+
     def policy_deployment_flow(self, checkup=False):
         # login FMC
         self.rest_connection()
@@ -955,9 +960,11 @@ class FireStick:
         self.zone_ip_info = self.zone_to_ip_information()
         # get network and port information via rest
         self.fmc_net_port_info()
-        # pull information from ippp
-        ippp = pd.read_csv(self.ippp_location)
-        self.ippp = self.retrieve_ippp(ippp)
+        # pull information from ippp IF DURING STANDARD READ FROM FILE
+        if not self.config_data.get('conn_events'):
+            self.ippp = pd.read_csv(self.ippp_location)
+
+        self.ippp = self.prepare_ippp(self.ippp)
         self.ippp = self.fix_port_range_objects(self.ippp)
         self.find_dup_services()
         # create FMC objects
@@ -977,11 +984,6 @@ class FireStick:
         if checkup:
             ffc.compare_ippp_acp(strict_checkup=strict_check)
         else:
-            # check if rules are in the FW prior to deployment since our this is stricter on the IPPP
-            rules_already_installed = ffc.compare_ippp_acp(strict_checkup=strict_check)
-            if rules_already_installed:
-                self.logfmc.critical(self.utils.highlight_important_message('NO RULES TO DEPLOY'))
-                quit()
             # create FMC rules
             ruleset, acp_set = self.create_acp_rule()
             while True:
@@ -992,9 +994,7 @@ class FireStick:
                     ffc.compare_ippp_acp(strict_checkup=strict_check)
                     break
                 elif 'Please enter with another name' in str(error_msg):
-                    new_rule_name = input('please enter a new rule name to use in the ruleset')
-                    self.utils.permission_check(f'are you sure you want to continue with {new_rule_name} as the rule name?')
-                    self.rule_prepend_name = new_rule_name
+                    self.create_new_rule_name()
                 else:
                     self.logfmc.critical('An error occured while processing the rules')
                     raise Exception('An error occured while processing the rules')

@@ -19,7 +19,7 @@ class FireDetector(FireStick):
         # get network and port information via rest
         self.fmc_net_port_info()
         # pull information from ippp
-        self.ippp = self.retrieve_ippp()
+        self.ippp = self.prepare_ippp()
         self.ippp = self.fix_port_range_objects(self.ippp)
         if not checkup:
             # check ippp service values for uniqueness

@@ -20,6 +20,10 @@ class Util:
     def top_dir(self):
         return path.dirname(path.abspath(__file__))
 
+    @property
+    def standard_ippp_cols(self):
+        return ['source', 'destination', 'service', 'port_range_low', 'port_range_high', 'protocol', 'comments']
+
     @staticmethod
     def csv_to_dict(csv_file) -> dict:
         return pd.read_csv(csv_file).to_dict()
@@ -36,7 +40,7 @@ class Util:
     @staticmethod
     def create_file_path(folder: str, file_name: str):
         TOP_DIR = path.dirname(path.abspath(__file__))
-        allowed_exts = ['csv', 'log', 'txt', 'json', 'rulbk', 'yaml','html']
+        allowed_exts = ['csv', 'log', 'txt', 'json', 'rulbk', 'yaml', 'html']
 
         input_ext = '.'.join(file_name.split(".")[1:])
         if input_ext.lower() not in allowed_exts:
@@ -165,7 +169,7 @@ class Util:
         return quote_plus(url)
 
     @staticmethod
-    def convert_dt_to_epoch(dt:datetime.datetime,time_delta:int=1):
+    def convert_dt_to_epoch(dt: datetime.datetime, time_delta: int = 1):
         # time delta must pass a amount of DAYS to change from
         time_delta = dt - datetime.timedelta(time_delta)
         return str(int(dt.timestamp())), str(int(time_delta.timestamp()))
@@ -194,7 +198,6 @@ def deprecated(func):
         return func(*args)
 
     return wrapper
-
 
 
 def log_collector(log_all=False):

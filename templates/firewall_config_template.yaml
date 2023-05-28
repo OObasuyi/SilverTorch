@@ -72,6 +72,25 @@ specific_src_dst:
 #/ GENERAL INFORMATION FROM FIREWALLS
 
 
+
+#/ LOG BASED RULE CREATION
+# if you want to make rules from the events in the FW use this
+conn_events: ~
+# currently it limited to ingested html files for parsing
+connections_data: 'Report of Connection Events.html'
+# this is needed if the events are not already in IPPP format, this will help ST convert the columns that needs to be
+# converted and drop the useless ones.
+event_transform_lib:
+  source: Initiator IP
+  destination: Responder IP
+  service: Application Protocol
+  port_range_low: Source Port / ICMP Type
+  port_range_high: Destination Port / ICMP Code
+  protocol: Protocol
+#/ LOG BASED RULE CREATION
+
+
+
 #/ MODIFY EXISTING RULES
 mod_rules: false
 #/ MODIFY EXISTING RULES
