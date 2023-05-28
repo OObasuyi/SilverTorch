@@ -9,11 +9,18 @@ class FireCheck:
     def __init__(self,af_class):
         self.fire_class = af_class
         self.logfmc = self.fire_class.logfmc
+        # holder IPPP will get changed by called
+        self.ippp = None
+
+    def should_strict_check(self):
+        literal_ippp = self.fire_class.ippp.copy()
+        literal_ippp['port'] = literal_ippp['protocol'] + ':' + literal_ippp['port']
+        return literal_ippp
 
     def _fix_ippp_data(self):
         # todo: need to grab ports if already in device and sub them out incase its incorrect on the ippp
         self.fire_class.zbr_bypass_check()
-        test_ippp = self.fire_class.ippp[['source', 'destination', 'protocol', 'port']]
+        test_ippp = self.ippp[['source', 'destination', 'protocol', 'port']]
         for port_info in self.fire_class.port_data:
             port_protco = test_ippp[(test_ippp['port'] == port_info[2]) & (test_ippp['protocol'] == port_info[1])]
             if not port_protco.empty:
@@ -26,8 +33,21 @@ class FireCheck:
             dst_flow = self.fire_class.get_zone_from_ip('destination', i)
             # block double zone
             if src_flow["source_zone"] == dst_flow["destination_zone"]:
-                same_zone_counter += 0
+                same_zone_counter += 1
                 continue
+            # remove dup zone found
+            s_check = src_flow["source_zone"] if not isinstance(src_flow["source_zone"],str) else tuple([src_flow["source_zone"]])
+            d_check = dst_flow["destination_zone"] if not isinstance(dst_flow["destination_zone"],str) else tuple([dst_flow["destination_zone"]])
+            least_zones = min([s_check,d_check], key=len)
+            most_zones = max([s_check,d_check], key=len)
+            # only remove if we have an uneven amount
+            if len(least_zones) != len(most_zones):
+                removed_dup_zone = tuple([z for z in most_zones if z not in least_zones])
+                if least_zones == s_check:
+                    dst_flow["destination_zone"] = removed_dup_zone
+                elif least_zones == d_check:
+                    src_flow["source_zone"] = removed_dup_zone
+
             rule_flow.update(src_flow)
             rule_flow.update(dst_flow)
             rule_flow.update({'port': test_ippp['port'][i] if test_ippp['port'][i] != 'any' else 'any'})
@@ -41,7 +61,7 @@ class FireCheck:
         if fix_ippp:
             test_ippp = self._fix_ippp_data()
         else:
-            test_ippp = self.fire_class.ippp
+            test_ippp = self.ippp
 
         acp_id = self.fire_class.fmc.policy.accesspolicy.get(name=self.fire_class.access_policy)
         acp_rules = self.fire_class.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id['id'])

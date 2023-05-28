@@ -1,24 +1,35 @@
+from ipaddress import ip_network
 from multiprocessing import Pool, cpu_count
 
+from WebRest.fire_webUI import FireWebCall
 from fw_deploy import FireStick
 from datetime import datetime
 import pandas as pd
-from re import search
 from os import getpid
 
 
 class FireComply(FireStick):
 
-    def __init__(self, configuration_data: dict, cred_file=None):
+    def __init__(self, configuration_data: dict, cred_file=None, generate_conn: bool = True):
         super().__init__(configuration_data=configuration_data, cred_file=cred_file)
-        self.rest_connection()
         self.comply_dir = 'compliance_rules'
         self.dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d_%H%M")
+        # placeholder if we need specific IPs
+        self.specific_ips = None
+        # if we need to call the actual API instead of the Web UI ( prevents error session exist...)
+        if generate_conn:
+            self.rest_connection()
+
+    def gen_output_info(self, new_dir, new_file):
+        output_dir = f'{self.comply_dir}/{new_dir}'
+        output_file = f'{new_file}_{self.dt_now}.csv'
+        return output_dir, output_file
 
     def export_current_policy(self):
         self.logfmc.warning('Trying to Export rule(s) from Firewall')
-        output_dir = f'{self.comply_dir}/specific_rules' if self.config_data.get('save_specific_rules') else f'{self.comply_dir}/all_rules'
-        output_file = f'{self.rule_prepend_name}_{self.access_policy}_{self.dt_now}.csv' if self.config_data.get('save_specific_rules') else f'{self.access_policy}_{self.dt_now}.csv'
+        output_dir = 'specific_rules' if self.config_data.get('save_specific_rules') else 'all_rules'
+        output_file = f'{self.rule_prepend_name}_{self.access_policy}' if self.config_data.get('save_specific_rules') else f'{self.access_policy}'
+        output_dir, output_file = self.gen_output_info(output_dir, output_file)
 
         # get rules
         current_ruleset = self.transform_rulesets(save_current_ruleset=True)
@@ -36,8 +47,9 @@ class FireComply(FireStick):
 
             # internal func to collect subset_df
             def rule_gatherer_callback(data):
-                parsed_ruleset.append(data)
-                return parsed_ruleset
+                if not data.empty:
+                    parsed_ruleset.append(data)
+                    return parsed_ruleset
 
             def log_func_error(error):
                 self.logfmc.error(error)
@@ -65,6 +77,7 @@ class FireComply(FireStick):
 
     def rule_spool(self, idx, current_ruleset):
         self.logfmc.debug(f'spawning new process for rule_spool on {getpid()}')
+
         rule_loc = current_ruleset.iloc[idx]
         collasped_rule = [rule_loc.to_dict()]
         # useed to stop loop this is amount of columns to make pass on to make sure we unravel them all
@@ -98,9 +111,12 @@ class FireComply(FireStick):
 
         # if we need rules just for specific IPs
         specific_ips = self.config_data.get('specific_src_dst')
+
         if specific_ips:
-            src_spec = subset_df[subset_df['real_source'].apply(lambda x: bool(search(specific_ips, x))) & subset_df['real_destination'].apply(lambda x: not bool(search(specific_ips, x)))]
-            dst_spec = subset_df[subset_df['real_destination'].apply(lambda x: bool(search(specific_ips, x))) & subset_df['real_source'].apply(lambda x: not bool(search(specific_ips, x)))]
+            # check if IPs dont have host bit set
+            self.specific_ips = [ip_network(sips) for sips in specific_ips if self.ip_address_check(sips)]
+            src_spec = subset_df[subset_df['real_source'].apply(lambda x: self.find_specific_ip_needed(x)) & subset_df['real_destination'].apply(lambda x: not self.find_specific_ip_needed(x))]
+            dst_spec = subset_df[subset_df['real_destination'].apply(lambda x: self.find_specific_ip_needed(x)) & subset_df['real_source'].apply(lambda x: not self.find_specific_ip_needed(x))]
             subset_df = pd.concat([src_spec, dst_spec], ignore_index=True)
             subset_df.dropna(inplace=True)
 
@@ -118,3 +134,71 @@ class FireComply(FireStick):
         subset_df.drop(columns=['real_port'], inplace=True)
         subset_df.rename(columns={'real_source': 'source', 'real_destination': 'destination'}, inplace=True)
         return subset_df
+
+    def find_specific_ip_needed(self, x):
+        # catch any
+        try:
+            x = ip_network(x)
+        except ValueError as verror:
+            self.logfmc.debug(verror)
+            return False
+
+        for sub_ip in self.specific_ips:
+            if x.subnet_of(sub_ip):
+                return True
+
+        return False
+
+    def transform_connection_events(self) -> pd.DataFrame:
+        self.logfmc.warning('Trying to Transform events from Firewall to csv')
+        output_dir = 'analysis'
+        output_file = 'connection_events'
+        output_file = f'{output_file}_{self.rule_prepend_name}' if self.rule_prepend_name else output_file
+        output_dir, output_file = self.gen_output_info(output_dir, output_file)
+
+        # get report HTML File
+        conn_html_dpath = self.utils.create_file_path(folder=output_dir, file_name=self.config_data.get('connections_data'))
+
+        # transform
+        conn_events = pd.read_html(conn_html_dpath,header=0)[0]
+        conn_events = conn_events[conn_events['Access Control Rule'] == self.rule_prepend_name]
+        if not conn_events.empty:
+            self.utils.remove_file(conn_html_dpath)
+            conn_events.to_csv(f'{output_dir}/{output_file}',index=False)
+        else:
+            self.logfmc.error('NO RULES TO TRANSFORM INTO CSV')
+
+        return conn_events
+
+    def generate_rules_from_events(self):
+        # pull data into SilverTorch
+        conn_events = self.transform_connection_events()
+
+        # make sure IPPP format is in df if not pull them from YAML
+        if self.utils.standard_ippp_cols not in conn_events.columns.tolist():
+            # reverse dict k,v to a usable format
+            trans_lib = {value: key for key, value in self.config_data.get('event_transform_lib').items()}
+            conn_events.rename(columns=trans_lib,inplace=True)
+        # drop useless cols
+        conn_events['comments'] = self.config_data.get('rule_comment')
+        conn_events = conn_events[self.utils.standard_ippp_cols]
+
+        # since these are con events src ports will more than likely be ephemeral
+        conn_events['port_range_low'] = conn_events['port_range_high']
+
+        for c in self.utils.standard_ippp_cols:
+            # strip anything not a number in ports
+            if 'port' in c:
+                conn_events[c] = conn_events[c].apply(lambda x: ''.join(filter(str.isdigit, x)))
+            # if dont have a value for service insert generic service name
+            elif 'service' in c:
+                conn_events[c] = conn_events[c].astype(str).apply(lambda x: 'generic_service' if x == 'nan' else x )
+
+        self.ippp = conn_events
+        # create a new rule name for events
+        self.create_new_rule_name()
+        # push rules
+        self.policy_deployment_flow()
+
+
+

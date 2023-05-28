@@ -30,7 +30,7 @@ class FireHands(FireBroom):
         self.zone_ip_info = self.zone_to_ip_information()
         # get rules that need to inserted/deleted
         ippp = pd.read_csv(self.ippp_location)
-        self.ippp = self.retrieve_ippp(ippp)
+        self.ippp = self.prepare_ippp(ippp)
         self.ippp = self.fix_port_range_objects(self.ippp)
         # standardize operation col in ippp
         self.ippp['comments'] = self.ippp['comments'].apply(lambda x: 1 if x == 'add' else 0)

@@ -1,3 +1,4 @@
+import datetime
 from gzip import open as gzopen
 import logging
 from functools import wraps
@@ -5,6 +6,7 @@ from json import load, dump
 from logging.handlers import TimedRotatingFileHandler
 from os import path, makedirs, replace, rename, remove, walk
 from shutil import make_archive
+from urllib.parse import quote_plus
 
 import pandas as pd
 import yaml
@@ -13,6 +15,14 @@ TOP_DIR = path.dirname(path.abspath(__file__))
 
 
 class Util:
+
+    @property
+    def top_dir(self):
+        return path.dirname(path.abspath(__file__))
+
+    @property
+    def standard_ippp_cols(self):
+        return ['source', 'destination', 'service', 'port_range_low', 'port_range_high', 'protocol', 'comments']
 
     @staticmethod
     def csv_to_dict(csv_file) -> dict:
@@ -30,7 +40,7 @@ class Util:
     @staticmethod
     def create_file_path(folder: str, file_name: str):
         TOP_DIR = path.dirname(path.abspath(__file__))
-        allowed_exts = ['csv', 'log', 'txt', 'json', 'rulbk', 'yaml']
+        allowed_exts = ['csv', 'log', 'txt', 'json', 'rulbk', 'yaml', 'html']
 
         input_ext = '.'.join(file_name.split(".")[1:])
         if input_ext.lower() not in allowed_exts:
@@ -89,17 +99,24 @@ class Util:
             return _internal_pull_creds_02(cdict)
 
     @staticmethod
-    def permission_check(deploy_msg: str):
+    def permission_check(deploy_msg: str, expected_answers=None, ):
         logc = log_collector()
+
+        if expected_answers is None:
+            expected_answers = ['c']
+        expected_answers = [ea.lower() for ea in expected_answers]
+
         if not isinstance(deploy_msg, str):
             raise ValueError(f'deploy_msg value is not type str. you passed an {type(deploy_msg)} object')
 
-        warn_msg = f'{deploy_msg}.\nENTER c TO CONTINUE'
+        split_ans = ' OR '.join(expected_answers) if len(expected_answers) > 1 else expected_answers[0]
+        warn_msg = f'{deploy_msg}.\nENTER {split_ans} TO CONTINUE'
         while True:
             logc.warning(warn_msg)
             user_input = input()
-            if user_input.lower() == 'c':
-                break
+            user_input = user_input.lower()
+            if user_input in expected_answers:
+                return user_input
 
     @staticmethod
     def rename_ippp_instances(f_name: str, replace_with_list: list, to_look_for: str, col_to_process_list: list, return_pd=False):
@@ -146,6 +163,29 @@ class Util:
     def highlight_important_message(msg: str, n_stars: int = 6):
         num_stars = "*" * n_stars
         return f'{num_stars}{msg}{num_stars}'
+
+    @staticmethod
+    def url_encode_info(url):
+        return quote_plus(url)
+
+    @staticmethod
+    def convert_dt_to_epoch(dt: datetime.datetime, time_delta: int = 1):
+        # time delta must pass a amount of DAYS to change from
+        time_delta = dt - datetime.timedelta(time_delta)
+        return str(int(dt.timestamp())), str(int(time_delta.timestamp()))
+
+    @staticmethod
+    def remove_file(file_path):
+        logc = log_collector()
+        logc.warning(f'Deleting file at: {file_path}')
+        if TOP_DIR in file_path:
+            try:
+                remove(file_path)
+                logc.warning(f"{file_path} deleted successfully!")
+            except OSError as e:
+                logc.error(f"Error deleting the {file_path}: {e}")
+        else:
+            logc.critical(f'WE ARE NOT IN THE RIGHT PATH TO DELETE FILES:\n\n TOP DIR: {TOP_DIR} \n\n FILE PATH: {file_path}\n\n')
 
 
 def deprecated(func):
