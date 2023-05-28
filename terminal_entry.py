@@ -54,6 +54,12 @@ def terminal_entry():
         fm.export_current_policy()
         return
 
+    # save connection events
+    if config_file.get('conn_events'):
+        fm = FireComply(cred_file=args.cred_file, configuration_data=config_file,generate_conn=False)
+        fm.transform_connection_events()
+        return
+
     # modify existing rules
     if config_file.get('mod_rules'):
         fh = FireHands(cred_file=args.cred_file, configuration_data=config_file)

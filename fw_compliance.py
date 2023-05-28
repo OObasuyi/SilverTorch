@@ -1,6 +1,7 @@
 from ipaddress import ip_network
 from multiprocessing import Pool, cpu_count
 
+from WebRest.fire_webUI import FireWebCall
 from fw_deploy import FireStick
 from datetime import datetime
 import pandas as pd
@@ -9,18 +10,26 @@ from os import getpid
 
 class FireComply(FireStick):
 
-    def __init__(self, configuration_data: dict, cred_file=None):
+    def __init__(self, configuration_data: dict, cred_file=None, generate_conn: bool = True):
         super().__init__(configuration_data=configuration_data, cred_file=cred_file)
-        self.rest_connection()
         self.comply_dir = 'compliance_rules'
         self.dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d_%H%M")
         # placeholder if we need specific IPs
         self.specific_ips = None
+        # if we need to call the actual API instead of the Web UI ( prevents error session exist...)
+        if generate_conn:
+            self.rest_connection()
+
+    def gen_output_info(self, new_dir, new_file):
+        output_dir = f'{self.comply_dir}/{new_dir}'
+        output_file = f'{new_file}_{self.dt_now}.csv'
+        return output_dir, output_file
 
     def export_current_policy(self):
         self.logfmc.warning('Trying to Export rule(s) from Firewall')
-        output_dir = f'{self.comply_dir}/specific_rules' if self.config_data.get('save_specific_rules') else f'{self.comply_dir}/all_rules'
-        output_file = f'{self.rule_prepend_name}_{self.access_policy}_{self.dt_now}.csv' if self.config_data.get('save_specific_rules') else f'{self.access_policy}_{self.dt_now}.csv'
+        output_dir = 'specific_rules' if self.config_data.get('save_specific_rules') else 'all_rules'
+        output_file = f'{self.rule_prepend_name}_{self.access_policy}' if self.config_data.get('save_specific_rules') else f'{self.access_policy}'
+        output_dir, output_file = self.gen_output_info(output_dir, output_file)
 
         # get rules
         current_ruleset = self.transform_rulesets(save_current_ruleset=True)
@@ -126,7 +135,7 @@ class FireComply(FireStick):
         subset_df.rename(columns={'real_source': 'source', 'real_destination': 'destination'}, inplace=True)
         return subset_df
 
-    def find_specific_ip_needed(self,x):
+    def find_specific_ip_needed(self, x):
         # catch any
         try:
             x = ip_network(x)
@@ -139,3 +148,28 @@ class FireComply(FireStick):
                 return True
 
         return False
+
+    def transform_connection_events(self):
+        self.logfmc.warning('Trying to Transform events from Firewall to csv')
+        output_dir = 'analysis'
+        output_file = 'connection_events'
+        output_file = f'{output_file}_{self.rule_prepend_name}' if self.rule_prepend_name else output_file
+        output_dir, output_file = self.gen_output_info(output_dir, output_file)
+
+        # get report HTML File
+        conn_html_dpath = self.utils.create_file_path(folder=output_dir, file_name=self.config_data.get('connections_data'))
+
+        # transform
+        conn_events = pd.read_html(conn_html_dpath,header=0)[0]
+        conn_events = conn_events[conn_events['Access Control Rule'] == self.rule_prepend_name]
+        if not conn_events.empty:
+            self.utils.remove_file(conn_html_dpath)
+            conn_events.to_csv(f'{output_dir}/{output_file}',index=False)
+        else:
+            self.logfmc.error('NO RULES TO TRANSFORM INTO CSV')
+
+        return conn_events
+
+
+
+

@@ -1,3 +1,4 @@
+import datetime
 from gzip import open as gzopen
 import logging
 from functools import wraps
@@ -5,6 +6,7 @@ from json import load, dump
 from logging.handlers import TimedRotatingFileHandler
 from os import path, makedirs, replace, rename, remove, walk
 from shutil import make_archive
+from urllib.parse import quote_plus
 
 import pandas as pd
 import yaml
@@ -13,6 +15,10 @@ TOP_DIR = path.dirname(path.abspath(__file__))
 
 
 class Util:
+
+    @property
+    def top_dir(self):
+        return path.dirname(path.abspath(__file__))
 
     @staticmethod
     def csv_to_dict(csv_file) -> dict:
@@ -30,7 +36,7 @@ class Util:
     @staticmethod
     def create_file_path(folder: str, file_name: str):
         TOP_DIR = path.dirname(path.abspath(__file__))
-        allowed_exts = ['csv', 'log', 'txt', 'json', 'rulbk', 'yaml']
+        allowed_exts = ['csv', 'log', 'txt', 'json', 'rulbk', 'yaml','html']
 
         input_ext = '.'.join(file_name.split(".")[1:])
         if input_ext.lower() not in allowed_exts:
@@ -154,6 +160,29 @@ class Util:
         num_stars = "*" * n_stars
         return f'{num_stars}{msg}{num_stars}'
 
+    @staticmethod
+    def url_encode_info(url):
+        return quote_plus(url)
+
+    @staticmethod
+    def convert_dt_to_epoch(dt:datetime.datetime,time_delta:int=1):
+        # time delta must pass a amount of DAYS to change from
+        time_delta = dt - datetime.timedelta(time_delta)
+        return str(int(dt.timestamp())), str(int(time_delta.timestamp()))
+
+    @staticmethod
+    def remove_file(file_path):
+        logc = log_collector()
+        logc.warning(f'Deleting file at: {file_path}')
+        if TOP_DIR in file_path:
+            try:
+                remove(file_path)
+                logc.warning(f"{file_path} deleted successfully!")
+            except OSError as e:
+                logc.error(f"Error deleting the {file_path}: {e}")
+        else:
+            logc.critical(f'WE ARE NOT IN THE RIGHT PATH TO DELETE FILES:\n\n TOP DIR: {TOP_DIR} \n\n FILE PATH: {file_path}\n\n')
+
 
 def deprecated(func):
     fname = func.__name__
@@ -165,6 +194,7 @@ def deprecated(func):
         return func(*args)
 
     return wrapper
+
 
 
 def log_collector(log_all=False):
