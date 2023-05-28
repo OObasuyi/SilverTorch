@@ -170,6 +170,8 @@ class FireComply(FireStick):
 
         return conn_events
 
-
+    def generate_rules_from_events(self):
+        # TODO: parse into IPPP format and send to rule deploy engine for processing while skipping if rule exist segment
+        pass
 
 
