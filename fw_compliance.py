@@ -166,7 +166,7 @@ class FireComply(FireStick):
              conn_events = pd.read_csv(conn_dpath,header=0)
         conn_events = conn_events[conn_events['Access Control Rule'] == self.rule_prepend_name]
         if not conn_events.empty:
-            self.utils.remove_file(conn_html_dpath)
+            self.utils.remove_file(conn_dpath)
             conn_events.to_csv(f'{output_dir}/{output_file}',index=False)
         else:
             self.logfmc.error('NO RULES TO TRANSFORM INTO CSV')
