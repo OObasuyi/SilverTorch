@@ -335,9 +335,9 @@ class FireStick:
 
                 # check if need to resolve names
                 if self.config_data.get('resolve_objects'):
-                    host_list = [{'name': self.retrieve_hostname(host), 'value': host} for host in host_list if host not in net_data]
+                    host_list = [{'name': self.retrieve_hostname(host), 'value': host} for host in tqdm(host_list,total=len(host_list)) if host not in net_data]
                 else:
-                    host_list = [{'name': host, 'value': host} for host in host_list if host not in net_data]
+                    host_list = [{'name': host, 'value': host} for host in tqdm(host_list,total=len(host_list)) if host not in net_data]
 
                 try:
                     self.fmc.object.network.create(data=net_list)
