@@ -7,7 +7,7 @@ from logging.handlers import TimedRotatingFileHandler
 from os import path, makedirs, replace, rename, remove, walk
 from shutil import make_archive
 from urllib.parse import quote_plus
-
+from time import sleep
 import pandas as pd
 import yaml
 
@@ -195,6 +195,18 @@ def deprecated(func):
     @wraps(func)
     def wrapper(*args):
         logc.warning(f'the {fname} function is deprecated and will be removed in future releases')
+        return func(*args)
+
+    return wrapper
+
+def sleeper(func):
+    fname = func.__name__
+    logc = log_collector()
+
+    @wraps(func)
+    def wrapper(*args):
+        logc.warning(f'SLEEPING {fname} for 3 SECONDS')
+        sleep(3)
         return func(*args)
 
     return wrapper
