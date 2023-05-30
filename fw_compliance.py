@@ -157,10 +157,13 @@ class FireComply(FireStick):
         output_dir, output_file = self.gen_output_info(output_dir, output_file)
 
         # get report HTML File
-        conn_html_dpath = self.utils.create_file_path(folder=output_dir, file_name=self.config_data.get('connections_data'))
+        conn_dpath = self.utils.create_file_path(folder=output_dir, file_name=self.config_data.get('connections_data'))
 
         # transform
-        conn_events = pd.read_html(conn_html_dpath,header=0)[0]
+        if '.html' in conn_html_dpath:
+            conn_events = pd.read_html(conn_dpath,header=0)[0]
+        else:
+             conn_events = pd.read_csv(conn_dpath,header=0)
         conn_events = conn_events[conn_events['Access Control Rule'] == self.rule_prepend_name]
         if not conn_events.empty:
             self.utils.remove_file(conn_html_dpath)
