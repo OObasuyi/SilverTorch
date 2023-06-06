@@ -253,7 +253,6 @@ class FireStick:
                         # if we dont have a mapping then we cant continue since we would not know how to create this object in the manager
                         if correct_match.empty:
                             missed_mapping = f"{i['port']}_{i['protocol']}"
-                            self.logfmc.warning(f'CREATING MAPPING FOR {missed_mapping}')
                             self.ippp['service'][(self.ippp['port'] == i['port']) & (preproc_df['protocol'] == i['protocol'])] = missed_mapping
                             continue
 
@@ -949,7 +948,7 @@ class FireStick:
         return pd.DataFrame(current_ruleset)
 
     def create_new_rule_name(self):
-        new_rule_name = input('please enter a new rule name to use in the ruleset')
+        new_rule_name = input('please enter a new rule name to use in the ruleset: ')
         self.utils.permission_check(f'are you sure you want to continue with {new_rule_name} as the rule name?')
         self.rule_prepend_name = new_rule_name
 

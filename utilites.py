@@ -103,7 +103,7 @@ class Util:
         logc = log_collector()
 
         if expected_answers is None:
-            expected_answers = ['c']
+            expected_answers = ['c',]
         expected_answers = [ea.lower() for ea in expected_answers]
 
         if not isinstance(deploy_msg, str):
@@ -114,7 +114,7 @@ class Util:
         while True:
             logc.warning(warn_msg)
             user_input = input()
-            user_input = user_input.lower()
+            user_input = str(user_input.lower())
             if user_input in expected_answers:
                 return user_input
 

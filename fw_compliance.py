@@ -151,24 +151,20 @@ class FireComply(FireStick):
 
     def transform_connection_events(self) -> pd.DataFrame:
         self.logfmc.warning('Trying to Transform events from Firewall to csv')
-        output_dir = 'analysis'
-        output_file = 'connection_events'
-        output_file = f'{output_file}_{self.rule_prepend_name}' if self.rule_prepend_name else output_file
+        output_dir = 'analysis/connection_events'
+        output_file = f'{self.rule_prepend_name}_RAW_CE_{self.dt_now}.csv'
         output_dir, output_file = self.gen_output_info(output_dir, output_file)
 
         # get report HTML File
         conn_dpath = self.utils.create_file_path(folder=output_dir, file_name=self.config_data.get('connections_data'))
 
         # transform
-        if '.html' in conn_html_dpath:
+        if '.html' in conn_dpath:
             conn_events = pd.read_html(conn_dpath,header=0)[0]
         else:
              conn_events = pd.read_csv(conn_dpath,header=0)
         conn_events = conn_events[conn_events['Access Control Rule'] == self.rule_prepend_name]
-        if not conn_events.empty:
-            self.utils.remove_file(conn_dpath)
-            conn_events.to_csv(f'{output_dir}/{output_file}',index=False)
-        else:
+        if conn_events.empty:
             self.logfmc.error('NO RULES TO TRANSFORM INTO CSV')
 
         return conn_events
@@ -187,14 +183,11 @@ class FireComply(FireStick):
         conn_events = conn_events[self.utils.standard_ippp_cols]
 
         # since these are con events src ports will more than likely be ephemeral
-        conn_events['port_range_low'] = conn_events['port_range_high']
+        conn_events['port_range_low'] = 'nan'
 
         for c in self.utils.standard_ippp_cols:
-            # strip anything not a number in ports
-            if 'port' in c:
-                conn_events[c] = conn_events[c].apply(lambda x: ''.join(filter(str.isdigit, x)))
             # if dont have a value for service insert generic service name
-            elif 'service' in c:
+            if 'service' in c:
                 conn_events[c] = conn_events[c].astype(str).apply(lambda x: 'generic_service' if x == 'nan' else x )
 
         self.ippp = conn_events
