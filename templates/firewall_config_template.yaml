@@ -69,6 +69,9 @@ specific_src_dst:
   - 192.168.0/24
   - 10.0.0.0/8
   - 218.17.85.0/24
+# if you want to get rules from specific zones
+specific_zones:
+  - inside
 #/ GENERAL INFORMATION FROM FIREWALLS
 
 

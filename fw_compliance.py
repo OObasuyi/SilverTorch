@@ -31,17 +31,37 @@ class FireComply(FireStick):
         output_file = f'{self.rule_prepend_name}_{self.access_policy}' if self.config_data.get('save_specific_rules') else f'{self.access_policy}'
         output_dir, output_file = self.gen_output_info(output_dir, output_file)
 
-        # get rules
+        def save_zone_info(x):
+            for szi in self.config_data.get('specific_zones'):
+                if szi in x:
+                    return True
+                # include any zones incase we need to further process specific IPs.
+                elif x == 'any':
+                    return True
+                else:
+                    return False
+
+        # get specific rules
         current_ruleset = self.transform_rulesets(save_current_ruleset=True)
         if self.config_data.get('save_specific_rules'):
             current_ruleset = current_ruleset[current_ruleset['policy_name'].str.startswith(self.rule_prepend_name)]
+
+        # get specific zones
+        if self.config_data.get('specific_zones'):
+            spec_zone_list = ['specific_src_zone','specific_dst_zone']
+            for szl,zone in zip(spec_zone_list,['src_z','dst_z']):
+                current_ruleset[szl] = current_ruleset[zone].astype(str).apply(lambda x: save_zone_info(x))
+
+            current_ruleset = current_ruleset[current_ruleset[spec_zone_list[0]] | current_ruleset[spec_zone_list[1]]]
+            current_ruleset.drop(columns=spec_zone_list,inplace=True)
+            current_ruleset.reset_index(inplace=True,drop=True)
 
         # prettify
         if self.config_data.get('pretty_rules'):
             current_ruleset.drop(columns=['src_z', 'dst_z', 'port', 'source', 'destination'], inplace=True)
             parsed_ruleset = []
             # TRY to use n-1 physical cores ( dont want anymore imports)
-            core_group = int((cpu_count() / 2)) - 1
+            core_group = int(cpu_count()) - 1
             core_group = core_group if core_group > 0 else 1
             pool = Pool(core_group)
 
@@ -111,7 +131,6 @@ class FireComply(FireStick):
 
         # if we need rules just for specific IPs
         specific_ips = self.config_data.get('specific_src_dst')
-
         if specific_ips:
             # check if IPs dont have host bit set
             self.specific_ips = [ip_network(sips) for sips in specific_ips if self.ip_address_check(sips)]
