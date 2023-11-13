@@ -31,17 +31,37 @@ class FireComply(FireStick):
         output_file = f'{self.rule_prepend_name}_{self.access_policy}' if self.config_data.get('save_specific_rules') else f'{self.access_policy}'
         output_dir, output_file = self.gen_output_info(output_dir, output_file)
 
-        # get rules
+        def save_zone_info(x):
+            for szi in self.config_data.get('specific_zones'):
+                if szi in x:
+                    return True
+                # include any zones incase we need to further process specific IPs.
+                elif x == 'any':
+                    return True
+                else:
+                    return False
+
+        # get specific rules
         current_ruleset = self.transform_rulesets(save_current_ruleset=True)
         if self.config_data.get('save_specific_rules'):
             current_ruleset = current_ruleset[current_ruleset['policy_name'].str.startswith(self.rule_prepend_name)]
+
+        # get specific zones
+        if self.config_data.get('specific_zones'):
+            spec_zone_list = ['specific_src_zone','specific_dst_zone']
+            for szl,zone in zip(spec_zone_list,['src_z','dst_z']):
+                current_ruleset[szl] = current_ruleset[zone].astype(str).apply(lambda x: save_zone_info(x))
+
+            current_ruleset = current_ruleset[current_ruleset[spec_zone_list[0]] | current_ruleset[spec_zone_list[1]]]
+            current_ruleset.drop(columns=spec_zone_list,inplace=True)
+            current_ruleset.reset_index(inplace=True,drop=True)
 
         # prettify
         if self.config_data.get('pretty_rules'):
             current_ruleset.drop(columns=['src_z', 'dst_z', 'port', 'source', 'destination'], inplace=True)
             parsed_ruleset = []
             # TRY to use n-1 physical cores ( dont want anymore imports)
-            core_group = int((cpu_count() / 2)) - 1
+            core_group = int(cpu_count()) - 1
             core_group = core_group if core_group > 0 else 1
             pool = Pool(core_group)
 
@@ -111,7 +131,6 @@ class FireComply(FireStick):
 
         # if we need rules just for specific IPs
         specific_ips = self.config_data.get('specific_src_dst')
-
         if specific_ips:
             # check if IPs dont have host bit set
             self.specific_ips = [ip_network(sips) for sips in specific_ips if self.ip_address_check(sips)]
@@ -151,21 +170,20 @@ class FireComply(FireStick):
 
     def transform_connection_events(self) -> pd.DataFrame:
         self.logfmc.warning('Trying to Transform events from Firewall to csv')
-        output_dir = 'analysis'
-        output_file = 'connection_events'
-        output_file = f'{output_file}_{self.rule_prepend_name}' if self.rule_prepend_name else output_file
+        output_dir = 'analysis/connection_events'
+        output_file = f'{self.rule_prepend_name}_RAW_CE_{self.dt_now}.csv'
         output_dir, output_file = self.gen_output_info(output_dir, output_file)
 
         # get report HTML File
-        conn_html_dpath = self.utils.create_file_path(folder=output_dir, file_name=self.config_data.get('connections_data'))
+        conn_dpath = self.utils.create_file_path(folder=output_dir, file_name=self.config_data.get('connections_data'))
 
         # transform
-        conn_events = pd.read_html(conn_html_dpath,header=0)[0]
-        conn_events = conn_events[conn_events['Access Control Rule'] == self.rule_prepend_name]
-        if not conn_events.empty:
-            self.utils.remove_file(conn_html_dpath)
-            conn_events.to_csv(f'{output_dir}/{output_file}',index=False)
+        if '.html' in conn_dpath:
+            conn_events = pd.read_html(conn_dpath,header=0)[0]
         else:
+             conn_events = pd.read_csv(conn_dpath,header=0)
+        conn_events = conn_events[conn_events['Access Control Rule'] == self.rule_prepend_name]
+        if conn_events.empty:
             self.logfmc.error('NO RULES TO TRANSFORM INTO CSV')
 
         return conn_events
@@ -184,14 +202,11 @@ class FireComply(FireStick):
         conn_events = conn_events[self.utils.standard_ippp_cols]
 
         # since these are con events src ports will more than likely be ephemeral
-        conn_events['port_range_low'] = conn_events['port_range_high']
+        conn_events['port_range_low'] = 'nan'
 
         for c in self.utils.standard_ippp_cols:
-            # strip anything not a number in ports
-            if 'port' in c:
-                conn_events[c] = conn_events[c].apply(lambda x: ''.join(filter(str.isdigit, x)))
             # if dont have a value for service insert generic service name
-            elif 'service' in c:
+            if 'service' in c:
                 conn_events[c] = conn_events[c].astype(str).apply(lambda x: 'generic_service' if x == 'nan' else x )
 
         self.ippp = conn_events
@@ -199,6 +214,7 @@ class FireComply(FireStick):
         self.create_new_rule_name()
         # push rules
         self.policy_deployment_flow()
+
 
 
 

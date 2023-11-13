@@ -237,9 +237,11 @@ class FireBroom(FireStick):
             return
 
         # test if deploy matches original
+        fcheck = FireCheck(self)
         self.ippp = acp_rules.copy()
         self.ippp.rename(columns={'src_z': 'source_zone', 'dst_z': 'destination_zone', 'source': 'source_network', 'destination': 'destination_network'}, inplace=True)
-        rules_present = FireCheck(self).compare_ippp_acp(fix_ippp=False)
+        fcheck.ippp = self.ippp
+        rules_present = fcheck.compare_ippp_acp(fix_ippp=False)
         if not rules_present:
             self.logfmc.critical('UNROLLED RULES NOT PRESENT IN COLLAPSED RULE SET. ROLLING BACK!')
             # delete collapsed wrong rules
@@ -332,8 +334,52 @@ class FireBroom(FireStick):
         # send rules for deletion
         self.del_fmc_objects(type_='rule',obj_type=non_hit_rules_names)
 
+    def combine_acp_ruleset(self):
+        com_rules = self.config_data.get('combine_ruleset')
+        comment = self.config_data.get('rule_comment') if isinstance(self.config_data.get('rule_comment'),str) else 'NONE'
+        new_rule_landing = self.config_data.get('access_policy')
 
+        # checker
+        if isinstance(com_rules,list):
+            if len(com_rules) != 2 or not new_rule_landing:
+                self.logfmc.error('Please only use two ACPs for comparison')
+                return
+        elif not com_rules:
+            self.logfmc.error('NO rules in compare list')
+            return
 
+        # ETL rulesets
+        self.fmc_net_port_info()
+        _, com_rule_1 = self.retrieve_rule_objects(get_diff_access_pol=com_rules[0])
+        _, com_rule_2 = self.retrieve_rule_objects(get_diff_access_pol=com_rules[1])
+        com_rule_1 = self.transform_acp(com_rule_1)
+        com_rule_2 = self.transform_acp(com_rule_2)
+
+        # combine all row data to a str and create hashes for every row
+        com_rule_1['rule_HiD'] = com_rule_1.apply(lambda x:  self.utils.create_hash(x.astype(str).str.cat()), axis=1)
+        com_rule_2['rule_HiD'] = com_rule_2.apply(lambda x:  self.utils.create_hash(x.astype(str).str.cat()), axis=1)
+
+        # drop dup rules
+        combined_rules = pd.concat([com_rule_1, com_rule_2])
+        combined_rules.drop_duplicates(subset=['rule_HiD'],inplace=True,ignore_index=True)
+
+        # transform rules to ACP
+        nrl_id, _ = self.retrieve_rule_objects(get_diff_access_pol=new_rule_landing)
+        combined_rules.drop(columns=['real_port', 'action','rule_HiD'],inplace=True)
+        combined_rules.rename(columns={'src_z':'source_zone',"dst_z":'destination_zone','source':'source_network','destination':"destination_network"},inplace=True)
+        combined_rules['comment'] = comment
+        combined_rules.fillna('any',inplace=True)
+
+        # using chatGPT for this part..its getting late and running out of LAB time
+        duplicates = combined_rules.duplicated(subset='policy_name', keep=False)
+        counter = combined_rules[duplicates].groupby('policy_name').cumcount() + 1
+        combined_rules.loc[duplicates, 'policy_name'] = combined_rules.loc[duplicates, 'policy_name'].astype(str) + '_' +counter.astype(str)
+
+        # deploy rules to FW
+        self.deploy_rules(new_rules=combined_rules, current_acp_rules_id=nrl_id)
+        fcheck = FireCheck(self)
+        fcheck.ippp = combined_rules.copy()
+        fcheck.compare_ippp_acp(fix_ippp=False)
 
     def rollback_acp_op(self, rollback_pd, acp_id, comment: str = False):
         rollback_pd.rename(columns={'src_z': 'source_zone', 'dst_z': 'destination_zone', 'source': 'source_network', 'destination': 'destination_network'}, inplace=True)

@@ -102,8 +102,13 @@ class FireStick:
         self.port_data = [tuple([str(x.get('name')), str(x.get('protocol')), str(x.get('port')), str(x['id']), str(x['type'])]) for x in port_objects]
         self.port_group_object = [tuple([str(x['name']), _get_name_from_group_object(x.get('objects'), obj_type='port'), str(x['id'])]) for x in port_group_object]
 
-    def retrieve_rule_objects(self):
-        acp_id = self.fmc.policy.accesspolicy.get(name=self.access_policy)
+    def retrieve_rule_objects(self,get_diff_access_pol=False):
+        if get_diff_access_pol:
+            pol_to_use = get_diff_access_pol
+        else:
+            pol_to_use = self.access_policy
+
+        acp_id = self.fmc.policy.accesspolicy.get(name=pol_to_use)
         acp_id = acp_id['id']
         acp_rules = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id)
         return acp_id, acp_rules
@@ -253,7 +258,6 @@ class FireStick:
                         # if we dont have a mapping then we cant continue since we would not know how to create this object in the manager
                         if correct_match.empty:
                             missed_mapping = f"{i['port']}_{i['protocol']}"
-                            self.logfmc.warning(f'CREATING MAPPING FOR {missed_mapping}')
                             self.ippp['service'][(self.ippp['port'] == i['port']) & (preproc_df['protocol'] == i['protocol'])] = missed_mapping
                             continue
 
@@ -335,9 +339,9 @@ class FireStick:
 
                 # check if need to resolve names
                 if self.config_data.get('resolve_objects'):
-                    host_list = [{'name': self.retrieve_hostname(host), 'value': host} for host in host_list if host not in net_data]
+                    host_list = [{'name': self.retrieve_hostname(host), 'value': host} for host in tqdm(host_list,total=len(host_list)) if host not in net_data]
                 else:
-                    host_list = [{'name': host, 'value': host} for host in host_list if host not in net_data]
+                    host_list = [{'name': host, 'value': host} for host in tqdm(host_list,total=len(host_list)) if host not in net_data]
 
                 try:
                     self.fmc.object.network.create(data=net_list)
@@ -832,7 +836,8 @@ class FireStick:
                 dh[k] = v
             rule = dh
             rule_form = deepcopy(temp_form)
-            rule_form['name'] = f"{self.rule_prepend_name}_{take_num}"
+            # if we have a rule name already made for this item then use that if not Take a number!
+            rule_form['name'] = f"{self.rule_prepend_name}_{take_num}" if not rule.get('policy_name') else rule.get('policy_name')
             take_num += 1
 
             # strip net group to get only name for comparision
@@ -949,7 +954,7 @@ class FireStick:
         return pd.DataFrame(current_ruleset)
 
     def create_new_rule_name(self):
-        new_rule_name = input('please enter a new rule name to use in the ruleset')
+        new_rule_name = input('please enter a new rule name to use in the ruleset: ')
         self.utils.permission_check(f'are you sure you want to continue with {new_rule_name} as the rule name?')
         self.rule_prepend_name = new_rule_name
 

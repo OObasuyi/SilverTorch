@@ -7,7 +7,8 @@ from logging.handlers import TimedRotatingFileHandler
 from os import path, makedirs, replace, rename, remove, walk
 from shutil import make_archive
 from urllib.parse import quote_plus
-
+from time import sleep
+from hashlib import sha256
 import pandas as pd
 import yaml
 
@@ -103,7 +104,7 @@ class Util:
         logc = log_collector()
 
         if expected_answers is None:
-            expected_answers = ['c']
+            expected_answers = ['c',]
         expected_answers = [ea.lower() for ea in expected_answers]
 
         if not isinstance(deploy_msg, str):
@@ -114,7 +115,7 @@ class Util:
         while True:
             logc.warning(warn_msg)
             user_input = input()
-            user_input = user_input.lower()
+            user_input = str(user_input.lower())
             if user_input in expected_answers:
                 return user_input
 
@@ -187,6 +188,14 @@ class Util:
         else:
             logc.critical(f'WE ARE NOT IN THE RIGHT PATH TO DELETE FILES:\n\n TOP DIR: {TOP_DIR} \n\n FILE PATH: {file_path}\n\n')
 
+    @staticmethod
+    def create_hash(data):
+        logc = log_collector()
+        if not isinstance(data,str):
+            logc.error(f"We can only hash STR types!. you passed : {type(data)}")
+            quit()
+        return sha256(data.encode('utf-8')).hexdigest()
+
 
 def deprecated(func):
     fname = func.__name__
@@ -195,6 +204,18 @@ def deprecated(func):
     @wraps(func)
     def wrapper(*args):
         logc.warning(f'the {fname} function is deprecated and will be removed in future releases')
+        return func(*args)
+
+    return wrapper
+
+def sleeper(func):
+    fname = func.__name__
+    logc = log_collector()
+
+    @wraps(func)
+    def wrapper(*args):
+        logc.warning(f'SLEEPING {fname} for 3 SECONDS')
+        sleep(3)
         return func(*args)
 
     return wrapper
