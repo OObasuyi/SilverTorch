@@ -8,6 +8,7 @@ from os import path, makedirs, replace, rename, remove, walk
 from shutil import make_archive
 from urllib.parse import quote_plus
 from time import sleep
+from hashlib import sha256
 import pandas as pd
 import yaml
 
@@ -186,6 +187,14 @@ class Util:
                 logc.error(f"Error deleting the {file_path}: {e}")
         else:
             logc.critical(f'WE ARE NOT IN THE RIGHT PATH TO DELETE FILES:\n\n TOP DIR: {TOP_DIR} \n\n FILE PATH: {file_path}\n\n')
+
+    @staticmethod
+    def create_hash(data):
+        logc = log_collector()
+        if not isinstance(data,str):
+            logc.error(f"We can only hash STR types!. you passed : {type(data)}")
+            quit()
+        return sha256(data.encode('utf-8')).hexdigest()
 
 
 def deprecated(func):

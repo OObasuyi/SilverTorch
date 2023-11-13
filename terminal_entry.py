@@ -35,6 +35,8 @@ def terminal_entry():
         # delete ununsed rules
         if config_file.get('delete_unused_rules'):
             fb.remove_non_hit_rules()
+        if config_file.get('combine_ruleset'):
+            fb.combine_acp_ruleset()
         return
 
     # check rule consistency or deploy new rules

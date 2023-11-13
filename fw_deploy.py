@@ -102,8 +102,13 @@ class FireStick:
         self.port_data = [tuple([str(x.get('name')), str(x.get('protocol')), str(x.get('port')), str(x['id']), str(x['type'])]) for x in port_objects]
         self.port_group_object = [tuple([str(x['name']), _get_name_from_group_object(x.get('objects'), obj_type='port'), str(x['id'])]) for x in port_group_object]
 
-    def retrieve_rule_objects(self):
-        acp_id = self.fmc.policy.accesspolicy.get(name=self.access_policy)
+    def retrieve_rule_objects(self,get_diff_access_pol=False):
+        if get_diff_access_pol:
+            pol_to_use = get_diff_access_pol
+        else:
+            pol_to_use = self.access_policy
+
+        acp_id = self.fmc.policy.accesspolicy.get(name=pol_to_use)
         acp_id = acp_id['id']
         acp_rules = self.fmc.policy.accesspolicy.accessrule.get(container_uuid=acp_id)
         return acp_id, acp_rules
