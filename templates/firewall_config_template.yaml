@@ -54,11 +54,11 @@ group_clean_name: false
 remove_unused: false
 # if you want to merge two ACPs into one you need to specify the two below
 # ***IMPORTANT*** the rule_prepend_name will be the new name of the ACP that will created from both ACPS
+# the ACP that these two will merged into WILL USE THE access_policy VARIABLE. also should be listed below and a catergory of automation_engine should be created also in the ACP
 combine_ruleset:
   - test12
   - test13
-# the ACP that these two will merged into also should be listed below and a catergory of automation_engine should be created also in the ACP
-combine_ruleset_into: test20
+
 # emergency switch in case something happened(network/power drop) in rule cleanup module since it involved rearranges the firewall configs.
 # this switch will reinstall the ACP ruleset that were modified.
 # recover old ACP file if the program crashed

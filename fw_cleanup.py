@@ -335,7 +335,7 @@ class FireBroom(FireStick):
     def combine_acp_ruleset(self):
         com_rules = self.config_data.get('combine_ruleset')
         comment = self.config_data.get('rule_comment') if isinstance(self.config_data.get('rule_comment'),str) else 'NONE'
-        new_rule_landing = self.config_data.get('combine_ruleset_into')
+        new_rule_landing = self.config_data.get('access_policy')
 
         # checker
         if isinstance(com_rules,list):
@@ -372,7 +372,6 @@ class FireBroom(FireStick):
         duplicates = combined_rules.duplicated(subset='policy_name', keep=False)
         counter = combined_rules[duplicates].groupby('policy_name').cumcount() + 1
         combined_rules.loc[duplicates, 'policy_name'] = combined_rules.loc[duplicates, 'policy_name'].astype(str) + '_' +counter.astype(str)
-
 
         # deploy rules to FW
         self.ippp = combined_rules
