@@ -381,11 +381,6 @@ class FireBroom(FireStick):
         fcheck.ippp = combined_rules.copy()
         fcheck.compare_ippp_acp(fix_ippp=False)
 
-        pass
-
-
-
-
     def rollback_acp_op(self, rollback_pd, acp_id, comment: str = False):
         rollback_pd.rename(columns={'src_z': 'source_zone', 'dst_z': 'destination_zone', 'source': 'source_network', 'destination': 'destination_network'}, inplace=True)
         rollback_pd.drop(columns=['policy_name'], inplace=True)
