@@ -363,16 +363,22 @@ class FireBroom(FireStick):
 
         # transform rules to ACP
         nrl_id, _ = self.retrieve_rule_objects(get_diff_access_pol=new_rule_landing)
-        combined_rules.drop(columns=['real_port','policy_name', 'action','rule_HiD'],inplace=True)
+        combined_rules.drop(columns=['real_port', 'action','rule_HiD'],inplace=True)
         combined_rules.rename(columns={'src_z':'source_zone',"dst_z":'destination_zone','source':'source_network','destination':"destination_network"},inplace=True)
         combined_rules['comment'] = comment
         combined_rules.fillna('any',inplace=True)
 
+        # using chatGPT for this part..its getting late and running out of LAB time
+        duplicates = combined_rules.duplicated(subset='policy_name', keep=False)
+        counter = combined_rules[duplicates].groupby('policy_name').cumcount() + 1
+        combined_rules.loc[duplicates, 'policy_name'] = combined_rules.loc[duplicates, 'policy_name'].astype(str) + '_' +counter.astype(str)
+
+
         # deploy rules to FW
         self.ippp = combined_rules
         # todo: need to modify what the rule name becasue if you dont every rule will be the rule prepend name and it will lose it original name
-        #self.deploy_rules(new_rules=combined_rules, current_acp_rules_id=nrl_id)
-        #FireCheck(self).compare_ippp_acp(fix_ippp=False)
+        self.deploy_rules(new_rules=combined_rules, current_acp_rules_id=nrl_id)
+        FireCheck(self).compare_ippp_acp(fix_ippp=False)
 
         pass
 

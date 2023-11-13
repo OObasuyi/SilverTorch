@@ -836,7 +836,8 @@ class FireStick:
                 dh[k] = v
             rule = dh
             rule_form = deepcopy(temp_form)
-            rule_form['name'] = f"{self.rule_prepend_name}_{take_num}"
+            # if we have a rule name already made for this item then use that if not Take a number!
+            rule_form['name'] = f"{self.rule_prepend_name}_{take_num}" if not rule.get('policy_name') else rule.get('policy_name')
             take_num += 1
 
             # strip net group to get only name for comparision
