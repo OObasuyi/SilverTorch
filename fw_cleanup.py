@@ -237,9 +237,11 @@ class FireBroom(FireStick):
             return
 
         # test if deploy matches original
+        fcheck = FireCheck(self)
         self.ippp = acp_rules.copy()
         self.ippp.rename(columns={'src_z': 'source_zone', 'dst_z': 'destination_zone', 'source': 'source_network', 'destination': 'destination_network'}, inplace=True)
-        rules_present = FireCheck(self).compare_ippp_acp(fix_ippp=False)
+        fcheck.ippp = self.ippp
+        rules_present = fcheck.compare_ippp_acp(fix_ippp=False)
         if not rules_present:
             self.logfmc.critical('UNROLLED RULES NOT PRESENT IN COLLAPSED RULE SET. ROLLING BACK!')
             # delete collapsed wrong rules
@@ -374,10 +376,10 @@ class FireBroom(FireStick):
         combined_rules.loc[duplicates, 'policy_name'] = combined_rules.loc[duplicates, 'policy_name'].astype(str) + '_' +counter.astype(str)
 
         # deploy rules to FW
-        self.ippp = combined_rules
-        # todo: need to modify what the rule name becasue if you dont every rule will be the rule prepend name and it will lose it original name
         self.deploy_rules(new_rules=combined_rules, current_acp_rules_id=nrl_id)
-        FireCheck(self).compare_ippp_acp(fix_ippp=False)
+        fcheck = FireCheck(self)
+        fcheck.ippp = combined_rules.copy()
+        fcheck.compare_ippp_acp(fix_ippp=False)
 
         pass
 
