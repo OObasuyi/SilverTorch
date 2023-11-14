@@ -365,6 +365,7 @@ class FireBroom(FireStick):
 
         # transform rules to ACP
         nrl_id, _ = self.retrieve_rule_objects(get_diff_access_pol=new_rule_landing)
+        combined_rules = combined_rules[combined_rules['action'].str.upper() == self.config_data.get('ruleset_type')]
         combined_rules.drop(columns=['real_port', 'action','rule_HiD'],inplace=True)
         combined_rules.rename(columns={'src_z':'source_zone',"dst_z":'destination_zone','source':'source_network','destination':"destination_network"},inplace=True)
         combined_rules['comment'] = comment
