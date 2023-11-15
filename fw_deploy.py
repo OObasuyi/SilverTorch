@@ -989,7 +989,7 @@ class FireStick:
             self.ippp = r_rotate.copy()
             firecheck.ippp = self.ippp
             ruleset, acp_set = self.create_acp_rule()
-            if ruleset:
+            if not isinstance(ruleset,bool):
                 self.deployment_verification(firecheck, ruleset, acp_set, strict_check)
 
         # rejoin and check for completeness
