@@ -673,7 +673,7 @@ class FireStick:
         if ruleset.empty:
             self.logfmc.critical(self.utils.highlight_important_message('NO RULES TO DEPLOY'))
             if self.config_data.get('multi_rule_ippp'):
-                return
+                return False,False
             else:
                 quit()
 
@@ -989,7 +989,8 @@ class FireStick:
             self.ippp = r_rotate.copy()
             firecheck.ippp = self.ippp
             ruleset, acp_set = self.create_acp_rule()
-            self.deployment_verification(firecheck, ruleset, acp_set, strict_check)
+            if ruleset:
+                self.deployment_verification(firecheck, ruleset, acp_set, strict_check)
 
         # rejoin and check for completeness
         firecheck.ippp = multi_rule_holder
