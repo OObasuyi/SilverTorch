@@ -244,10 +244,13 @@ class FireStick:
                 preproc_df = pd.concat([preproc_df, fw_port_data], ignore_index=True, sort=False)
 
                 # get all the port mismatch findings from the holder
-                ans = self.utils.permission_check(
-                    self.utils.highlight_important_message(f'you have {len(fixing_holder)} duplicate matches in this IPPP do you want to create an mapping in the object store for ALL objects? y/N'),
-                    ['y', 'n']
-                )
+                if not self.config_data.get('silent_mode'):
+                    ans = self.utils.permission_check(
+                        self.utils.highlight_important_message(f'you have {len(fixing_holder)} duplicate matches in this IPPP do you want to create an mapping in the object store for ALL objects? y/N'),
+                        ['y', 'n'])
+                else:
+                    ans = 'y'
+
                 if ans == 'n':
                     self.logfmc.critical(f'mismatched items saved to {fname}')
                     self.logfmc.critical(self.utils.highlight_important_message('PLEASE CREATING MAPPING AND RESTART ENGINE'))
@@ -748,7 +751,8 @@ class FireStick:
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
         ruleset_loc = self.utils.create_file_path('predeploy_rules', f"fmc_ruleset_preload_configs_{dt_now}.csv", )
         new_rules.to_csv(ruleset_loc, index=False)
-        self.utils.permission_check(f'REVIEW PRE-DEPLOY RULESET FILE located at {ruleset_loc}')
+        if not self.config_data.get('silent_mode'):
+            self.utils.permission_check(f'REVIEW PRE-DEPLOY RULESET FILE located at {ruleset_loc}')
 
         temp_form = {
             "action": self.ruleset_type, "enabled": 'true', "type": "AccessRule",
