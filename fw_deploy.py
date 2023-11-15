@@ -980,7 +980,7 @@ class FireStick:
 
         # rotate rule names
         rule_rotator = self.ippp.groupby(col_name)
-        for r_name, r_rotate in tqdm(rule_rotator, desc=f'creating rules with custom rule names.', total=3, colour='YELLOW'):
+        for r_name, r_rotate in tqdm(rule_rotator, desc=f'creating rules with custom rule names.', total=int(rule_rotator.ngroups), colour='YELLOW'):
             # send rules to processor
             self.ippp = r_rotate.copy()
             firecheck.ippp = self.ippp
