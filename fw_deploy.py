@@ -658,12 +658,17 @@ class FireStick:
         # if their all the same zone then we got nothing to find dups of
         if ruleset.empty:
             self.logfmc.critical(self.utils.highlight_important_message('NOTHING IN RULESET THEY MIGHT ALL BE THE SAME ZONE'))
-            quit()
+            if self.config_data.get('multi_rule_ippp'):
+                return False
+            else:
+                quit()
         return ruleset
 
     def create_acp_rule(self):
         # get ruleset
         ruleset = self.standardize_ippp()
+        if isinstance(ruleset,bool):
+           return False, False
         ruleset, acp_id = self.find_inter_dup_policies(ruleset)
 
         # if we removed all the dups and we have no new rules or for some reason we dont have rules to deploy raise to stop the program
