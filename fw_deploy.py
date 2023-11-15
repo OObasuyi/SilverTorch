@@ -669,7 +669,10 @@ class FireStick:
         ruleset.drop_duplicates(ignore_index=True, inplace=True)
         if ruleset.empty:
             self.logfmc.critical(self.utils.highlight_important_message('NO RULES TO DEPLOY'))
-            quit()
+            if self.config_data.get('multi_rule_ippp'):
+                return
+            else:
+                quit()
 
         # agg by zone
         ruleset_holder = []
