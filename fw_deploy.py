@@ -975,7 +975,8 @@ class FireStick:
         rule_rotator = self.ippp.groupby(col_name)
         for r_name, r_rotate in tqdm(rule_rotator, desc=f'creating rules with custom rule names.', total=3, colour='YELLOW'):
             # send rules to processor
-            self.ippp = r_rotate
+            self.ippp = r_rotate.copy()
+            firecheck.ippp = self.ippp
             ruleset, acp_set = self.create_acp_rule()
             self.deployment_verification(firecheck, ruleset, acp_set, strict_check)
 
