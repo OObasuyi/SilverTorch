@@ -719,6 +719,9 @@ class FireStick:
             if not dup_seen:
                 ruleset_holder.append(group.to_dict())
         ruleset = pd.DataFrame(ruleset_holder)
+        # add rule name back to df if needed
+        if self.config_data.get('multi_rule_ippp'):
+            ruleset['policy_name'] = self.ippp['policy_name'].iloc[0]
 
         # remove tuples from multi-zoned rows
         for col in ruleset.columns:
@@ -881,6 +884,7 @@ class FireStick:
                     rule_form['destinationPorts'] = {'objects': [{'name': i[0], 'id': i[3], 'type': i[4]} for p in port for i in self.port_data if i[0] == p]}
 
             rule_form['newComments'] = [rule['comment']]
+
             charity_policy.append(rule_form)
 
         try:
