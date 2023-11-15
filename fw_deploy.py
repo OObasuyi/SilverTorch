@@ -1030,10 +1030,11 @@ class FireStick:
             ffc.compare_ippp_acp(strict_checkup=strict_check)
         # parse IPPP with multiple rule names
         elif multi_rule:
-            pass
+            self.multi_rule_processor(ffc,strict_check)
         else:
             # create FMC rules
             ruleset, acp_set = self.create_acp_rule()
+            # send to implement
             self.deployment_verification(ffc,ruleset,acp_set,strict_check)
 
     @staticmethod

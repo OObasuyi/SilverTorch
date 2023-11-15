@@ -45,9 +45,12 @@ def terminal_entry():
         if config_file.get('ippp_checkup'):
             # check if IPPP is in current ruleset
             fm.policy_deployment_flow(checkup=True)
-        elif config_file.get('stage_ippp'):
+        elif config_file.get('single_rule_ippp'):
             # standard policy deployment
             fm.policy_deployment_flow()
+        elif config_file.get('multi_rule_ippp'):
+            # standard policy deployment
+            fm.policy_deployment_flow(multi_rule=True)
         return
 
     # save CURRENT rules to disk

@@ -25,6 +25,10 @@ preprocess_csv: correction_list.csv
 
 #/ RULE MANAGEMENT
 stage_ippp: true
+# if you want to use only one rule name from the prepend assignment
+single_rule_ippp: true
+# if you want to use multi rules names MAKE SURE IN THE IPPP THAT YOU HAVE THE POLICY_NAME COLUMN with rules you want
+multi_rule_ippp: true
 # check to see if IPPP exist in the firewalls ruleset
 ippp_checkup: false
 # when pushing a config this will be prepended to the new rules,
