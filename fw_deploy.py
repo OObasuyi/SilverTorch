@@ -958,7 +958,7 @@ class FireStick:
         self.utils.permission_check(f'are you sure you want to continue with {new_rule_name} as the rule name?')
         self.rule_prepend_name = new_rule_name
 
-    def multi_rule_processor(self):
+    def multi_rule_processor(self, firecheck, strict_check):
         col_name = 'policy_name'
         # err handle
         try:
@@ -971,28 +971,32 @@ class FireStick:
         # keep original IPPP as we cycle
         multi_rule_holder = self.ippp.copy()
 
+        # rotate rule names
         rule_rotator = self.ippp.groupby(col_name)
-        for r_name, r_rotate in rule_rotator:
+        for r_name, r_rotate in tqdm(rule_rotator, desc=f'creating rules with custom rule names.', total=3, colour='YELLOW'):
             # send rules to processor
-            self.ippp = rule_rotator
+            self.ippp = r_rotate
             ruleset, acp_set = self.create_acp_rule()
-            self.deploy_rules(new_rules=ruleset, current_acp_rules_id=acp_set)
+            self.deployment_verification(firecheck, ruleset, acp_set, strict_check)
 
-    def deployment_verification(self,ffc,ruleset,acp_set,strict_check):
+        # rejoin and check for completeness
+        firecheck.ippp = multi_rule_holder
+        firecheck.compare_ippp_acp(strict_checkup=strict_check)
+
+    def deployment_verification(self,firecheck_class,ruleset,acp_set,strict_check):
         # need firecheck class object process
         while True:
             # deploy rules
             successful, error_msg = self.deploy_rules(new_rules=ruleset, current_acp_rules_id=acp_set)
             if successful:
                 # test rule Checkup
-                ffc.compare_ippp_acp(strict_checkup=strict_check)
+                firecheck_class.compare_ippp_acp(strict_checkup=strict_check)
                 break
             elif 'Please enter with another name' in str(error_msg):
                 self.create_new_rule_name()
             else:
                 self.logfmc.critical('An error occured while processing the rules')
                 raise Exception('An error occured while processing the rules')
-
 
     def policy_deployment_flow(self,checkup=False,multi_rule=False):
         # login FMC
@@ -1031,18 +1035,6 @@ class FireStick:
             # create FMC rules
             ruleset, acp_set = self.create_acp_rule()
             self.deployment_verification(ffc,ruleset,acp_set,strict_check)
-            while True:
-                # deploy rules
-                successful, error_msg = self.deploy_rules(new_rules=ruleset, current_acp_rules_id=acp_set)
-                if successful:
-                    # test rule Checkup
-                    ffc.compare_ippp_acp(strict_checkup=strict_check)
-                    break
-                elif 'Please enter with another name' in str(error_msg):
-                    self.create_new_rule_name()
-                else:
-                    self.logfmc.critical('An error occured while processing the rules')
-                    raise Exception('An error occured while processing the rules')
 
     @staticmethod
     @deprecated
