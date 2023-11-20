@@ -50,6 +50,8 @@ rule_cleanup: true
 object_cleanup: true
 # if you want to remove ZERO hit policies from ruleset. IF TRUE SPECIFY THE LOCATION OF THE RULES THAT NEED TO BE CLEANED
 delete_unused_rules: false
+# if you want to delete the unused rule before a specific date make sure you are using the "YYYY-MM-DD' format
+bestby_date: 2023-04-12
 # change the name of the network objects
 # resolve: whether you want IP or DNS as the new name value for indiuduval objects
 # group: change the whole name of the grouped objects defined by @rule_prepend_name
