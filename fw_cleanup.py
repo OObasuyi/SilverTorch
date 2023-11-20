@@ -102,13 +102,42 @@ class FireBroom(FireStick):
 
         elif type_ == 'rule':
             acp_id, acp_rules = self.retrieve_rule_objects()
+
+            # check if we need to delete rules BEFORE a certain comment date
+            if self.config_data.get('bestby_date'):
+                for i in acp_rules:
+                    if i.get('commentHistoryList'):
+                        stored_dates = []
+                        for comments_item in i.get('commentHistoryList'):
+                            dt_obj = datetime.strptime(comments_item['date'].split('T')[0],'%Y-%M-%D')
+                            stored_dates.append(dt_obj)
+                        # get the most recent comment date
+                        recent_date = max(stored_dates)
+                    else:
+                        # if there is no comment well have to leave the rule alone for now
+                        recent_date = datetime.now().date()
+
+                    # if we are past the best by then we should not keep
+                    if recent_date > self.config_data.get('bestby_date'):
+                        i['del_safe'] = True
+                    else:
+                        i['del_safe'] = False
+
+            # new ruleset if we are going by bestby date
+            if self.config_data.get('bestby_date'):
+                fw_rules = [i for i in acp_rules if i['del_safe']]
+            else:
+                fw_rules = acp_rules
+
+            # collect rules that need to deleted
             if isinstance(obj_type,str):
+                obj_type = obj_type.lower()
                 # deleting via kwrd rule name or 'all'
-                del_list = [i['name'] for i in acp_rules if self.rule_prepend_name in i['name']] if obj_type != 'all' else acp_rules
+                del_list = [i['name'] for i in fw_rules if self.rule_prepend_name in i['name']] if obj_type != 'all' else fw_rules
             else:
                 # deleting via passed list object
                 # make sure rules exist in ruleset
-                del_list = [i['name'] for i in acp_rules if i['name'] in obj_type]
+                del_list = [i['name'] for i in fw_rules if i['name'] in obj_type]
 
             for obj_id in tqdm(del_list, total=len(del_list), desc=f'deleting {self.rule_prepend_name} rules'):
                 try:
