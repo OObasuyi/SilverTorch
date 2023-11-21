@@ -105,12 +105,12 @@ class FireBroom(FireStick):
 
             # check if we need to delete rules BEFORE a certain comment date
             if self.config_data.get('bestby_date'):
-                bestby_date = datetime.strptime(self.config_data['bestby_date'], '%Y-%M-%D')
+                bestby_date = self.config_data['bestby_date']
                 for i in acp_rules:
                     if i.get('commentHistoryList'):
                         stored_dates = []
                         for comments_item in i.get('commentHistoryList'):
-                            dt_obj = datetime.strptime(comments_item['date'].split('T')[0],'%Y-%M-%D')
+                            dt_obj = datetime.strptime(comments_item['date'].split('T')[0],'%Y-%m-%d').date()
                             stored_dates.append(dt_obj)
                         # get the most recent comment date
                         recent_date = max(stored_dates)
