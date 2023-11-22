@@ -58,6 +58,7 @@ class FireStick:
         self.rule_prepend_name = configuration_data.get('rule_prepend_name')
         self.zone_of_last_resort = configuration_data.get('zone_of_last_resort')
         self.ruleset_type = configuration_data.get('ruleset_type').upper()
+        self.rule_section = configuration_data.get('rule_section')
         self.logfmc = log_collector()
         # optional passing commands
         self.config_data = configuration_data
@@ -244,10 +245,13 @@ class FireStick:
                 preproc_df = pd.concat([preproc_df, fw_port_data], ignore_index=True, sort=False)
 
                 # get all the port mismatch findings from the holder
-                ans = self.utils.permission_check(
-                    self.utils.highlight_important_message(f'you have {len(fixing_holder)} duplicate matches in this IPPP do you want to create an mapping in the object store for ALL objects? y/N'),
-                    ['y', 'n']
-                )
+                if not self.config_data.get('silent_mode'):
+                    ans = self.utils.permission_check(
+                        self.utils.highlight_important_message(f'you have {len(fixing_holder)} duplicate matches in this IPPP do you want to create an mapping in the object store for ALL objects? y/N'),
+                        ['y', 'n'])
+                else:
+                    ans = 'y'
+
                 if ans == 'n':
                     self.logfmc.critical(f'mismatched items saved to {fname}')
                     self.logfmc.critical(self.utils.highlight_important_message('PLEASE CREATING MAPPING AND RESTART ENGINE'))
@@ -655,12 +659,17 @@ class FireStick:
         # if their all the same zone then we got nothing to find dups of
         if ruleset.empty:
             self.logfmc.critical(self.utils.highlight_important_message('NOTHING IN RULESET THEY MIGHT ALL BE THE SAME ZONE'))
-            quit()
+            if self.config_data.get('multi_rule_ippp'):
+                return False
+            else:
+                quit()
         return ruleset
 
     def create_acp_rule(self):
         # get ruleset
         ruleset = self.standardize_ippp()
+        if isinstance(ruleset,bool):
+           return False, False
         ruleset, acp_id = self.find_inter_dup_policies(ruleset)
 
         # if we removed all the dups and we have no new rules or for some reason we dont have rules to deploy raise to stop the program
@@ -669,7 +678,10 @@ class FireStick:
         ruleset.drop_duplicates(ignore_index=True, inplace=True)
         if ruleset.empty:
             self.logfmc.critical(self.utils.highlight_important_message('NO RULES TO DEPLOY'))
-            quit()
+            if self.config_data.get('multi_rule_ippp'):
+                return False,False
+            else:
+                quit()
 
         # agg by zone
         ruleset_holder = []
@@ -716,6 +728,9 @@ class FireStick:
             if not dup_seen:
                 ruleset_holder.append(group.to_dict())
         ruleset = pd.DataFrame(ruleset_holder)
+        # add rule name back to df if needed
+        if self.config_data.get('multi_rule_ippp'):
+            ruleset['policy_name'] = self.ippp['policy_name'].iloc[0]
 
         # remove tuples from multi-zoned rows
         for col in ruleset.columns:
@@ -742,7 +757,8 @@ class FireStick:
         dt_now = datetime.now().replace(microsecond=0).strftime("%Y%m%d%H%M%S")
         ruleset_loc = self.utils.create_file_path('predeploy_rules', f"fmc_ruleset_preload_configs_{dt_now}.csv", )
         new_rules.to_csv(ruleset_loc, index=False)
-        self.utils.permission_check(f'REVIEW PRE-DEPLOY RULESET FILE located at {ruleset_loc}')
+        if not self.config_data.get('silent_mode'):
+            self.utils.permission_check(f'REVIEW PRE-DEPLOY RULESET FILE located at {ruleset_loc}')
 
         temp_form = {
             "action": self.ruleset_type, "enabled": 'true', "type": "AccessRule",
@@ -837,7 +853,7 @@ class FireStick:
             rule = dh
             rule_form = deepcopy(temp_form)
             # if we have a rule name already made for this item then use that if not Take a number!
-            rule_form['name'] = f"{self.rule_prepend_name}_{take_num}" if not rule.get('policy_name') else rule.get('policy_name')
+            rule_form['name'] = f"{self.rule_prepend_name}_{take_num}" if not rule.get('policy_name') else f"{rule.get('policy_name')}_{take_num}"
             take_num += 1
 
             # strip net group to get only name for comparision
@@ -878,10 +894,11 @@ class FireStick:
                     rule_form['destinationPorts'] = {'objects': [{'name': i[0], 'id': i[3], 'type': i[4]} for p in port for i in self.port_data if i[0] == p]}
 
             rule_form['newComments'] = [rule['comment']]
+
             charity_policy.append(rule_form)
 
         try:
-            res = self.fmc.policy.accesspolicy.accessrule.create(data=charity_policy, container_uuid=current_acp_rules_id, category='automation_engine', )
+            res = self.fmc.policy.accesspolicy.accessrule.create(data=charity_policy, container_uuid=current_acp_rules_id, category=self.rule_section, )
             self._creation_check(res, charity_policy)
             self.logfmc.warning(f'{"#" * 5}RULES PUSHED SUCCESSFULLY{"#" * 5}')
             return True, 1
@@ -958,7 +975,49 @@ class FireStick:
         self.utils.permission_check(f'are you sure you want to continue with {new_rule_name} as the rule name?')
         self.rule_prepend_name = new_rule_name
 
-    def policy_deployment_flow(self, checkup=False):
+    def multi_rule_processor(self, firecheck, strict_check):
+        col_name = 'policy_name'
+        # err handle
+        try:
+            self.ippp[col_name]
+        except Exception as error:
+            self.logfmc.critical(f'{col_name} is not present in the IPPP..Cannot process multiple rules..')
+            self.logfmc.debug(error)
+            quit()
+
+        # keep original IPPP as we cycle
+        multi_rule_holder = self.ippp.copy()
+
+        # rotate rule names
+        rule_rotator = self.ippp.groupby(col_name)
+        for r_name, r_rotate in tqdm(rule_rotator, desc=f'creating rules with custom rule names.', total=int(rule_rotator.ngroups), colour='YELLOW'):
+            # send rules to processor
+            self.ippp = r_rotate.copy()
+            firecheck.ippp = self.ippp
+            ruleset, acp_set = self.create_acp_rule()
+            if not isinstance(ruleset,bool):
+                self.deployment_verification(firecheck, ruleset, acp_set, strict_check)
+
+        # rejoin and check for completeness
+        firecheck.ippp = multi_rule_holder
+        firecheck.compare_ippp_acp(strict_checkup=strict_check)
+
+    def deployment_verification(self,firecheck_class,ruleset,acp_set,strict_check):
+        # need firecheck class object process
+        while True:
+            # deploy rules
+            successful, error_msg = self.deploy_rules(new_rules=ruleset, current_acp_rules_id=acp_set)
+            if successful:
+                # test rule Checkup
+                firecheck_class.compare_ippp_acp(strict_checkup=strict_check)
+                break
+            elif 'Please enter with another name' in str(error_msg):
+                self.create_new_rule_name()
+            else:
+                self.logfmc.critical('An error occured while processing the rules')
+                raise Exception('An error occured while processing the rules')
+
+    def policy_deployment_flow(self,checkup=False,multi_rule=False):
         # login FMC
         self.rest_connection()
         # Get zone info first via ClI
@@ -988,21 +1047,14 @@ class FireStick:
         # JUST checkup
         if checkup:
             ffc.compare_ippp_acp(strict_checkup=strict_check)
+        # parse IPPP with multiple rule names
+        elif multi_rule:
+            self.multi_rule_processor(ffc,strict_check)
         else:
             # create FMC rules
             ruleset, acp_set = self.create_acp_rule()
-            while True:
-                # deploy rules
-                successful, error_msg = self.deploy_rules(new_rules=ruleset, current_acp_rules_id=acp_set)
-                if successful:
-                    # test rule Checkup
-                    ffc.compare_ippp_acp(strict_checkup=strict_check)
-                    break
-                elif 'Please enter with another name' in str(error_msg):
-                    self.create_new_rule_name()
-                else:
-                    self.logfmc.critical('An error occured while processing the rules')
-                    raise Exception('An error occured while processing the rules')
+            # send to implement
+            self.deployment_verification(ffc,ruleset,acp_set,strict_check)
 
     @staticmethod
     @deprecated
