@@ -58,6 +58,7 @@ class FireStick:
         self.rule_prepend_name = configuration_data.get('rule_prepend_name')
         self.zone_of_last_resort = configuration_data.get('zone_of_last_resort')
         self.ruleset_type = configuration_data.get('ruleset_type').upper()
+        self.rule_section = configuration_data.get('rule_section')
         self.logfmc = log_collector()
         # optional passing commands
         self.config_data = configuration_data
@@ -897,7 +898,7 @@ class FireStick:
             charity_policy.append(rule_form)
 
         try:
-            res = self.fmc.policy.accesspolicy.accessrule.create(data=charity_policy, container_uuid=current_acp_rules_id, category='automation_engine', )
+            res = self.fmc.policy.accesspolicy.accessrule.create(data=charity_policy, container_uuid=current_acp_rules_id, category=self.rule_section, )
             self._creation_check(res, charity_policy)
             self.logfmc.warning(f'{"#" * 5}RULES PUSHED SUCCESSFULLY{"#" * 5}')
             return True, 1

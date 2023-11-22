@@ -12,6 +12,8 @@ zone_of_last_resort: outside_zone
 #/ firepower suite #
 access_policy: test_acp
 domain: Global
+# this is where the rules will be placed and must be created beforehand in the ACP
+rule_section: automation_engine
 #/ firepower suite #
 
 
@@ -61,8 +63,8 @@ group_clean_name: false
 # if you want to delete ununsed objects in the firewall in conjuction of a cleanup
 remove_unused: false
 # if you want to merge two ACPs into one you need to specify the two below
-# ***IMPORTANT*** the rule_prepend_name will be the new name of the ACP that will created from both ACPS
-# the ACP that these two will merged into WILL USE THE access_policy VARIABLE. also should be listed below and a catergory of automation_engine should be created also in the ACP
+# the ACP that these two will merged into WILL USE THE access_policy VARIABLE made above, that ACP should have the
+# correct catergory that matches the  "rule_section" made above
 combine_ruleset:
   - test12
   - test13
