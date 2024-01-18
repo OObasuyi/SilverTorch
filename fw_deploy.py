@@ -22,23 +22,9 @@ pd.options.mode.chained_assignment = None
 class FireStick:
 
     def __init__(self, configuration_data: dict, cred_file=None):
-        """
-        @param cred_file: JSON file hosting user/pass information DEPRECATED
-        @param configuration_data: KEY_fmc_host: FMC domain or IP address
-        @param configuration_data: KEY_ftd_host: FTD domain or IP address
-        @param configuration_data: KEY_domain: used to select the tenant in FMC
-        @param configuration_data: KEY_ippp_location: location of rules to stage on FMC
-        @param configuration_data: KEY_access_policy: which ACP to stage the rules onto
-        @param configuration_data: KEY_zbr_bypass: (experimental) if you want to manually assign the security zone to rules instead of doing the zone to IP lookup make sure the zone and rules rows match exactly!
-        @param configuration_data: KEY_rule_prepend_name: an additive on what to call the staged rule. ie a rule will look like facetime_rule_allow_facetime_5324
-        where facetime_rule is the prepend var, allow_facetime is the comment and number is unique set of characters to distinguish the rule
-        @@param zone_of_last_resort: this is needed when we dont know where a route lives relative to their Zone ie we know that a IP is northbound of our gateway or outside interface.
-        @@param same_cred: whether all creds to login devices use the same user and password combination
-        @@param ruleset_type: rules can only be inserted as all allow or denies
-        """
         self.utils = Util()
         creds = self.get_device_creds(cred_file=cred_file, same_cred=configuration_data.get('same_creds'))
-        # Sec-lint #1
+
         for v in list(creds.values()):
             if not isinstance(v, (str, int, float)):
                 raise ValueError(f'Cred file has a value that is not allowed for this script. returned value of {type(v)}')

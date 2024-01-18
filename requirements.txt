@@ -1,7 +1,7 @@
-fireREST==1.0.10
-netmiko==4.0.0
-pandas==1.3.5
-tqdm==4.63.1
-PyYAML~=6.0
-requests>=2.27.1
-urllib3>=1.26.9
+fireREST>=1.0.10
+netmiko>=4.0.0
+pandas>=1.3.5
+tqdm>=4.63.1
+PyYAML>=6.0
+requests>=2.30
+urllib3>=1.30
