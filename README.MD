@@ -9,7 +9,7 @@ within Cisco Firepower Management Center.
 * You can use these files as a example on how to stage and/or manage rules unto the Firewall.
 
 ## Core Workflows  🎛️
-Below explains how some the workflow work.
+Below explains how some of the workflow work.
 ### Deploy Rules
 1. import IPPP file
 2. extract src,dst,ports,protocols(UDP/TCP),proposed Port name, comment or ticket number
