@@ -1,0 +1,3 @@
+source,destination,service,port_range_low,port_range_high,protocol,comments
+192.168.1.5/24,10.1.1.1, COOL_REMOTE_PORT_39, 8081,8081,TCP,custom port for NCA
+192.168.1.5/24,10.1.1.1, APP_SYNC_RANGE, 765,791,UDP,custom port for NCA
