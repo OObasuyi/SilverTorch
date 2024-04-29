@@ -11,7 +11,7 @@ within Cisco Firepower Management Center.
 ## Core Workflows  🎛️
 Below explains how some of the workflow work.
 ### Deploy Rules
-1. import IPPP file
+1. import CSV file
 2. extract src,dst,ports,protocols(UDP/TCP),proposed Port name, comment or ticket number
 3. Get zone and Fastpath (CEF equivalent) from sensor
 4. get ports,protocols,IPs and their respective groups from FMC

@@ -8,6 +8,11 @@ firewall_sensor: 10.11.6.191
 # if there is not a routing entry for a specific IP in the IPPP then use this zone to set its zone in the ruleset.
 zone_of_last_resort: outside_zone
 
+#/ MANAGEMENT
+# whether the controller and the firewall/sensor uses the same creds.
+same_creds: true
+#/ MANAGEMENT
+
 
 #/ firepower suite #
 access_policy: test_acp
@@ -39,6 +44,8 @@ ippp_checkup: false
 # in addition if other functions such as cleanup or checkup is used it will find rules in the ruleset with this specific
 # name in the rule name BUT *BE AS CONCISE AS POSSIBLE.*
 rule_prepend_name: VOIP_RULES
+# CAN ONLY BE ALLOW OR DENY FOR RULE ENTRY
+ruleset_type: ALLOW
 # APPENDED COMMENT TO RULES if not found in the IPPP
 rule_comment: new stuff
 #/ RULE MANAGEMENT
@@ -88,6 +95,9 @@ specific_src_dst:
   - 192.168.0/24
   - 10.0.0.0/8
   - 218.17.85.0/24
+# if you want to check for rules that specific to either "src" or "dst" leave as none or do not include if you want to
+# check both
+check_only_specific_src_dst: none
 # if you want to get rules from specific zones
 specific_zones:
   - inside

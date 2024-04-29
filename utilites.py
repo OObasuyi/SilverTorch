@@ -104,7 +104,7 @@ class Util:
         logc = log_collector()
 
         if expected_answers is None:
-            expected_answers = ['c',]
+            expected_answers = ['c', ]
         expected_answers = [ea.lower() for ea in expected_answers]
 
         if not isinstance(deploy_msg, str):
@@ -191,7 +191,7 @@ class Util:
     @staticmethod
     def create_hash(data):
         logc = log_collector()
-        if not isinstance(data,str):
+        if not isinstance(data, str):
             logc.error(f"We can only hash STR types!. you passed : {type(data)}")
             quit()
         return sha256(data.encode('utf-8')).hexdigest()
@@ -207,6 +207,7 @@ def deprecated(func):
         return func(*args)
 
     return wrapper
+
 
 def sleeper(func):
     fname = func.__name__

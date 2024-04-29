@@ -1,5 +1,5 @@
 from datetime import datetime
-from re import split, match,sub
+from re import split, match, sub
 
 from fw_deploy import FireStick
 from tqdm import tqdm
@@ -7,6 +7,7 @@ import pandas as pd
 import pickle
 from os import replace
 from fw_test import FireCheck
+
 
 class FireBroom(FireStick):
     def __init__(self, configuration_data: dict, cred_file=None):
@@ -16,7 +17,7 @@ class FireBroom(FireStick):
         self.dt_now = datetime.now().replace(microsecond=0).strftime("%Y_%m_%d_%H%_M%_S")
         self.save_ext = 'rulbk'
 
-    def is_prepend_naming_correct(self,name_of_obj):
+    def is_prepend_naming_correct(self, name_of_obj):
         # check if it's a exact name match of the group
         name_check = split(r'[^a-zA-Z0-9\s]', name_of_obj)
         # # UC1: name kinda similar
@@ -26,7 +27,7 @@ class FireBroom(FireStick):
         try:
             # UC1: name kinda similar
             # UC2: if its anything other than our naming that follows then dont use.
-            if 'NetGroup' in name_check or ('net' and 'group' in  name_check):
+            if 'NetGroup' in name_check or ('net' and 'group' in name_check):
                 if match(f'^{self.rule_prepend_name}', name_of_obj).group() == self.rule_prepend_name:
                     return True
             else:
@@ -45,7 +46,7 @@ class FireBroom(FireStick):
         self.fmc_net_port_info()
         if not isinstance(self.rule_prepend_name, str):
             raise ValueError(f'self.rule_prepend_name value is not type str. you passed an {type(self.rule_prepend_name)} object')
-        normalize_str = sub('[^A-Za-z0-9|\-|_]+',' ', str(obj_type).upper())
+        normalize_str = sub('[^A-Za-z0-9|\-|_]+', ' ', str(obj_type).upper())
         self.utils.permission_check(f'Are you sure you want to delete {normalize_str} ***{self.rule_prepend_name}*** {type_} objects?')
         if type_ == 'network':
             def net_delete():
@@ -110,7 +111,7 @@ class FireBroom(FireStick):
                     if i.get('commentHistoryList'):
                         stored_dates = []
                         for comments_item in i.get('commentHistoryList'):
-                            dt_obj = datetime.strptime(comments_item['date'].split('T')[0],'%Y-%m-%d').date()
+                            dt_obj = datetime.strptime(comments_item['date'].split('T')[0], '%Y-%m-%d').date()
                             stored_dates.append(dt_obj)
                         # get the most recent comment date
                         recent_date = max(stored_dates)
@@ -131,7 +132,7 @@ class FireBroom(FireStick):
                 fw_rules = acp_rules
 
             # collect rules that need to deleted
-            if isinstance(obj_type,str):
+            if isinstance(obj_type, str):
                 obj_type = obj_type.lower()
                 # deleting via kwrd rule name or 'all'
                 del_list = [i['name'] for i in fw_rules if self.rule_prepend_name in i['name']] if obj_type != 'all' else fw_rules
@@ -149,7 +150,7 @@ class FireBroom(FireStick):
             raise ValueError(f'type_ not found please select rule, port, or network. you passed {type_}')
 
     @staticmethod
-    def backup_rules_op(acp_rules,recovery_loc):
+    def backup_rules_op(acp_rules, recovery_loc):
         rollback_acp = acp_rules.copy()
         with open(recovery_loc, 'wb') as save_rule:
             pickle.dump(rollback_acp, save_rule)
@@ -178,20 +179,20 @@ class FireBroom(FireStick):
             # todo: need to let the user chose if they want to optimze the config are just insert the old config from the recover file
         else:
             # in case we fail our rule test or error happens while processing
-            self.backup_rules_op(acp_rules,recovery_loc)
+            self.backup_rules_op(acp_rules, recovery_loc)
 
         for col in acp_rules.columns:
             acp_rules[col] = acp_rules[col].apply(lambda x: tuple(v for v in x) if isinstance(x, list) else x)
             # fill in vals that are really any
         acp_rules.replace({None: 'any'}, inplace=True)
 
-        return acp_rules,acp_id,recovery_fname,recovery_loc
+        return acp_rules, acp_id, recovery_fname, recovery_loc
 
     def collapse_fw_rules(self, comment: str = False, recover: bool = False):
         if not isinstance(comment, str):
             raise ValueError('COMMENT VALUE MUST BE PASSED')
         # DRP the fw rules
-        acp_rules,acp_id,recovery_fname,recovery_loc = self.prep_and_recover_fw_rules(recover)
+        acp_rules, acp_id, recovery_fname, recovery_loc = self.prep_and_recover_fw_rules(recover)
 
         # collapse FW rules by zone
         grouped_rules = acp_rules.groupby(['src_z', 'dst_z'])
@@ -257,7 +258,7 @@ class FireBroom(FireStick):
         # Delete old rules
         self.del_fmc_objects(type_='rule', obj_type='all')
         # send new rules
-        success,_ = self.deploy_rules(collapsed_rules, acp_id)
+        success, _ = self.deploy_rules(collapsed_rules, acp_id)
         if not success:
             self.logfmc.critical('Couldnt push new configs. Rolling Back!')
             self.rollback_acp_op(acp_rules, acp_id, comment=comment)
@@ -312,7 +313,7 @@ class FireBroom(FireStick):
             new_name = self.config_data.get('group_clean_name') if self.config_data.get('group_clean_name') else '_NetGroup_'
             # delete unused
             if self.config_data.get('remove_unused'):
-                self.del_fmc_objects(type_='network',obj_type='net_group')
+                self.del_fmc_objects(type_='network', obj_type='net_group')
                 self.fmc_net_port_info()
 
             target_change_list = []
@@ -355,22 +356,22 @@ class FireBroom(FireStick):
             file_name = self.config_data.get('delete_unused_rules')
 
         # open hitcount CSV
-        fname = self.utils.create_file_path('archive/non_hit_rules',file_name)
+        fname = self.utils.create_file_path('archive/non_hit_rules', file_name)
         non_hit_rules = pd.read_csv(fname)
 
         # make sure all hit counts are 0
         non_hit_rules_names = non_hit_rules['Rule Name'][non_hit_rules["Hit Count"] == 0].tolist()
 
         # send rules for deletion
-        self.del_fmc_objects(type_='rule',obj_type=non_hit_rules_names)
+        self.del_fmc_objects(type_='rule', obj_type=non_hit_rules_names)
 
     def combine_acp_ruleset(self):
         com_rules = self.config_data.get('combine_ruleset')
-        comment = self.config_data.get('rule_comment') if isinstance(self.config_data.get('rule_comment'),str) else 'NONE'
+        comment = self.config_data.get('rule_comment') if isinstance(self.config_data.get('rule_comment'), str) else 'NONE'
         new_rule_landing = self.config_data.get('access_policy')
 
         # checker
-        if isinstance(com_rules,list):
+        if isinstance(com_rules, list):
             if len(com_rules) != 2 or not new_rule_landing:
                 self.logfmc.error('Please only use two ACPs for comparison')
                 return
@@ -386,25 +387,25 @@ class FireBroom(FireStick):
         com_rule_2 = self.transform_acp(com_rule_2)
 
         # combine all row data to a str and create hashes for every row
-        com_rule_1['rule_HiD'] = com_rule_1.apply(lambda x:  self.utils.create_hash(x.astype(str).str.cat()), axis=1)
-        com_rule_2['rule_HiD'] = com_rule_2.apply(lambda x:  self.utils.create_hash(x.astype(str).str.cat()), axis=1)
+        com_rule_1['rule_HiD'] = com_rule_1.apply(lambda x: self.utils.create_hash(x.astype(str).str.cat()), axis=1)
+        com_rule_2['rule_HiD'] = com_rule_2.apply(lambda x: self.utils.create_hash(x.astype(str).str.cat()), axis=1)
 
         # drop dup rules
         combined_rules = pd.concat([com_rule_1, com_rule_2])
-        combined_rules.drop_duplicates(subset=['rule_HiD'],inplace=True,ignore_index=True)
+        combined_rules.drop_duplicates(subset=['rule_HiD'], inplace=True, ignore_index=True)
 
         # transform rules to ACP
         nrl_id, _ = self.retrieve_rule_objects(get_diff_access_pol=new_rule_landing)
         combined_rules = combined_rules[combined_rules['action'].str.upper() == self.config_data.get('ruleset_type')]
-        combined_rules.drop(columns=['real_port', 'action','rule_HiD'],inplace=True)
-        combined_rules.rename(columns={'src_z':'source_zone',"dst_z":'destination_zone','source':'source_network','destination':"destination_network"},inplace=True)
+        combined_rules.drop(columns=['real_port', 'action', 'rule_HiD'], inplace=True)
+        combined_rules.rename(columns={'src_z': 'source_zone', "dst_z": 'destination_zone', 'source': 'source_network', 'destination': "destination_network"}, inplace=True)
         combined_rules['comment'] = comment
-        combined_rules.fillna('any',inplace=True)
+        combined_rules.fillna('any', inplace=True)
 
         # using chatGPT for this part..its getting late and running out of LAB time
         duplicates = combined_rules.duplicated(subset='policy_name', keep=False)
         counter = combined_rules[duplicates].groupby('policy_name').cumcount() + 1
-        combined_rules.loc[duplicates, 'policy_name'] = combined_rules.loc[duplicates, 'policy_name'].astype(str) + '_' +counter.astype(str)
+        combined_rules.loc[duplicates, 'policy_name'] = combined_rules.loc[duplicates, 'policy_name'].astype(str) + '_' + counter.astype(str)
 
         # deploy rules to FW
         self.deploy_rules(new_rules=combined_rules, current_acp_rules_id=nrl_id)

@@ -134,9 +134,17 @@ class FireComply(FireStick):
         if specific_ips:
             # check if IPs dont have host bit set
             self.specific_ips = [ip_network(sips) for sips in specific_ips if self.ip_address_check(sips)]
-            src_spec = subset_df[subset_df['real_source'].apply(lambda x: self.find_specific_ip_needed(x)) & subset_df['real_destination'].apply(lambda x: not self.find_specific_ip_needed(x))]
-            dst_spec = subset_df[subset_df['real_destination'].apply(lambda x: self.find_specific_ip_needed(x)) & subset_df['real_source'].apply(lambda x: not self.find_specific_ip_needed(x))]
-            subset_df = pd.concat([src_spec, dst_spec], ignore_index=True)
+            cos_specific = self.config_data.get('check_only_specific_src_dst')
+            if cos_specific == 'src':
+                src_spec = subset_df[subset_df['real_source'].apply(lambda x: self.find_specific_ip_needed(x)) & subset_df['real_destination'].apply(lambda x: not self.find_specific_ip_needed(x))]
+                subset_df = src_spec
+            elif cos_specific == 'dst':
+                dst_spec = subset_df[subset_df['real_destination'].apply(lambda x: self.find_specific_ip_needed(x)) & subset_df['real_source'].apply(lambda x: not self.find_specific_ip_needed(x))]
+                subset_df = dst_spec
+            else:
+                src_spec = subset_df[subset_df['real_source'].apply(lambda x: self.find_specific_ip_needed(x)) & subset_df['real_destination'].apply(lambda x: not self.find_specific_ip_needed(x))]
+                dst_spec = subset_df[subset_df['real_destination'].apply(lambda x: self.find_specific_ip_needed(x)) & subset_df['real_source'].apply(lambda x: not self.find_specific_ip_needed(x))]
+                subset_df = pd.concat([src_spec, dst_spec], ignore_index=True)
             subset_df.dropna(inplace=True)
 
         # need to get the port name, so we can match what we have listed in the FW
