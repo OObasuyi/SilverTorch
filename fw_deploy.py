@@ -1043,15 +1043,14 @@ class FireStick:
             self.deployment_verification(ffc,ruleset,acp_set,strict_check)
 
     @staticmethod
-    @deprecated
-    def _get_device_creds(cred_file):
+    def load_cred_file(cred_file):
         cred_file = Util().create_file_path('safe', cred_file)
         with open(cred_file, 'r') as cf:
             return json.load(cf)
 
     def get_device_creds(self, cred_file=None, same_cred=True):
         if cred_file is not None:
-            return self._get_device_creds(cred_file)
+            return self.load_cred_file(cred_file)
         ftd_u = None
         ftd_p = None
 
