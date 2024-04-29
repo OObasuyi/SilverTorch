@@ -28,7 +28,7 @@ Below explains how some of the workflow work.
 4. follow steps 7 & 8 from Deploy Rules
 
 ### IPPP Checkup
-1. import IPPP file
+1. import CSV file
 2. extract src,dst,ports,protocols(UDP/TCP),proposed Port name, ticket number
 3. basically step 8 from Deploy Rules
 
