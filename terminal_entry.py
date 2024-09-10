@@ -3,7 +3,6 @@ from argparse import ArgumentParser
 from fw_cleanup import FireBroom
 from fw_compliance import FireComply
 from fw_deploy import FireStick
-from fw_modify import FireHands
 from utilites import Util
 
 
@@ -63,12 +62,6 @@ def terminal_entry():
     if config_file.get('conn_events'):
         fm = FireComply(cred_file=args.cred_file, configuration_data=config_file,generate_conn=False)
         fm.generate_rules_from_events()
-        return
-
-    # modify existing rules
-    if config_file.get('mod_rules'):
-        fh = FireHands(cred_file=args.cred_file, configuration_data=config_file)
-        fh.modify_ruleset()
         return
 
 
