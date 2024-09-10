@@ -395,6 +395,8 @@ class FireStick:
             host_names = [i[0] for i in self.net_data]
             count = 1
             while True:
+                # https://github.com/OObasuyi/SilverTorch/issues/83
+                retrieved = f"{retrieved}_{ip}"
                 if retrieved in host_names:
                     count += 1
                     retrieved = f'{retrieved}_{count}'

@@ -1,7 +1,6 @@
 from ipaddress import ip_network
 from multiprocessing import Pool, cpu_count
 
-from WebRest.fire_webUI import FireWebCall
 from fw_deploy import FireStick
 from datetime import datetime
 import pandas as pd

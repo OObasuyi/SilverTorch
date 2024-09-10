@@ -7,7 +7,7 @@ from requests_toolbelt.multipart.encoder import MultipartEncoder
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
-
+# THIS IS STILL A WIP
 class FireWebCall:
     def __init__(self,hostname: str,username: str,password: str,verify_cert=False):
 
